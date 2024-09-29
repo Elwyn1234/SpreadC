@@ -744,23 +744,23 @@ int main() {
         char *translatedChar = malloc(sizeof(char) * 100);
         int translatedCharLength = XLookupString(&event.xkey, translatedChar, 100, NULL, NULL);
         KeySym keysym = XLookupKeysym(&event.xkey, 0);
-        char *keyPressed = XKeysymToString(keysym);
+        char *untranslatedChar = XKeysymToString(keysym);
         printf("\n");
-        printf("keyPressed: %s\n", keyPressed);
+        printf("untranslatedChar: %s\n", untranslatedChar);
         printf("translatedChar: %s\n", translatedChar);
-        if (!keyPressed)
+        if (!untranslatedChar)
           break;
 
-        if (stringsEqual("Shift_L", 7, keyPressed)) {
+        if (stringsEqual("Shift_L", 7, untranslatedChar)) {
           program.shiftDown = TRUE;
         }
 
         if (sheet.insertMode == TRUE && !IsModifierKey(keysym) && !IsFunctionKey(keysym)) {
-          if (stringsEqual("Escape", 6, keyPressed)) {
+          if (stringsEqual("Escape", 6, untranslatedChar)) {
             sheet.insertMode = FALSE;
             break;
           }
-          else if (stringsEqual("BackSpace", 9, keyPressed)) {
+          else if (stringsEqual("BackSpace", 9, untranslatedChar)) {
             sheetCellBackSpace(sheet, sheet.selectedCell, sheet.strings.data[sheet.selectedCell].length - 1);
           }
           else {
@@ -772,7 +772,7 @@ int main() {
           }
         }
         else {
-          char charKeyPressed = keyPressedToChar(keyPressed);
+          char charKeyPressed = keyPressedToChar(untranslatedChar);
           if (program.shiftDown) {
             charKeyPressed = keyToUpper(charKeyPressed);
           }
