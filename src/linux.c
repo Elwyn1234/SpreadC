@@ -425,10 +425,9 @@ char handleNormalModeInput(Sheet *sheet, char charKeyPressed, Boolean useRecorde
 
 
 
-//******************************************//
-//               Render                     //
-//******************************************//
-
+/////////////////////////////////////////////////////////////////////
+// Render
+/////////////////////////////////////////////////////////////////////
 void render(Program program, Sheet sheet) {
   XWindowAttributes winAttribs = {0};
   XGetWindowAttributes(program.display, program.window, &winAttribs);
@@ -464,7 +463,11 @@ void render(Program program, Sheet sheet) {
   XSetForeground(program.display, program.gc, program.background.pixel);
   XFillRectangle(program.display, program.window, program.gc, 0, 0, winAttribs.width, winAttribs.height);
 
+
+
+  /////////////////////////////////////////////////////////////////////
   // Highlight the selected Cell
+  /////////////////////////////////////////////////////////////////////
   { // Use braces here to make it clear that the variables defined are only used here and not lower in the function
     int row = sheet.selectedCell / sheet.columnCount;
     int column = sheet.selectedCell % sheet.columnCount;
@@ -479,7 +482,11 @@ void render(Program program, Sheet sheet) {
   // int textScaledHeightPangoUnits = textScale * logicalRectPangoUnits.height;
   // int textScaledWidthPangoUnits = textScale * logicalRectPangoUnits.width;
 
+
+
+  /////////////////////////////////////////////////////////////////////
   // Render text for each cell
+  /////////////////////////////////////////////////////////////////////
   for (int i = 0; i < sheet.columnCount * sheet.rowCount; i++) {
     cairo_save(program.cr);
 
@@ -504,7 +511,11 @@ void render(Program program, Sheet sheet) {
     cairo_restore(program.cr);
   }
   
+
+
+  /////////////////////////////////////////////////////////////////////
   // Render text for row numbering & column lettering
+  /////////////////////////////////////////////////////////////////////
   for (int column = 0; column < sheet.columnCount; column++) {
     cairo_save(program.cr);
 
@@ -556,7 +567,9 @@ void render(Program program, Sheet sheet) {
 
 
 
+  /////////////////////////////////////////////////////////////////////
   // Draw the Rows and Columns
+  /////////////////////////////////////////////////////////////////////
   XSetForeground(program.display, program.gc, program.foreground.pixel);
   XDrawLine(program.display, program.window, program.gc, winAttribs.x, winAttribs.y + yoffset, winAttribs.x + winAttribs.width, winAttribs.y + yoffset);
   for (int i = 0; i < sheet.rowCount; i++) {
@@ -741,19 +754,22 @@ int main() {
 
       }
       case KeyPress: {
-        char *translatedChar = malloc(sizeof(char) * 100);
+        char *translatedChar = calloc(100, sizeof(char));
         int translatedCharLength = XLookupString(&event.xkey, translatedChar, 100, NULL, NULL);
         KeySym keysym = XLookupKeysym(&event.xkey, 0);
         char *untranslatedChar = XKeysymToString(keysym);
+
         printf("\n");
-        printf("untranslatedChar: %s\n", untranslatedChar);
-        printf("translatedChar: %s\n", translatedChar);
+        printf("[DEBUG] untranslatedChar: %s\n", untranslatedChar);
+        printf("[DEBUG] translatedChar: %s\n", translatedChar);
+
         if (!untranslatedChar)
           break;
-
         if (stringsEqual("Shift_L", 7, untranslatedChar)) {
           program.shiftDown = TRUE;
+          break;
         }
+
 
         if (sheet.insertMode == TRUE && !IsModifierKey(keysym) && !IsFunctionKey(keysym)) {
           if (stringsEqual("Escape", 6, untranslatedChar)) {
@@ -772,12 +788,7 @@ int main() {
           }
         }
         else {
-          char charKeyPressed = keyPressedToChar(untranslatedChar);
-          if (program.shiftDown) {
-            charKeyPressed = keyToUpper(charKeyPressed);
-          }
-          String placeholder = {0};
-          program.lastCharKeyPressed = handleNormalModeInput(&sheet, charKeyPressed, FALSE, program.lastCharKeyPressed, program.lastTextInserted);
+          program.lastCharKeyPressed = handleNormalModeInput(&sheet, translatedChar[0], FALSE, program.lastCharKeyPressed, program.lastTextInserted);
         }
         render(program, sheet);
         break;
