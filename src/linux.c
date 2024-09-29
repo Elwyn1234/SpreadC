@@ -741,8 +741,13 @@ int main() {
 
       }
       case KeyPress: {
+        char *translatedChar = malloc(sizeof(char) * 100);
+        int translatedCharLength = XLookupString(&event.xkey, translatedChar, 100, NULL, NULL);
         KeySym keysym = XLookupKeysym(&event.xkey, 0);
         char *keyPressed = XKeysymToString(keysym);
+        printf("\n");
+        printf("keyPressed: %s\n", keyPressed);
+        printf("translatedChar: %s\n", translatedChar);
         if (!keyPressed)
           break;
 
@@ -755,21 +760,13 @@ int main() {
             sheet.insertMode = FALSE;
             break;
           }
-          else if (stringsEqual("space", 5, keyPressed)) {
-            sheetCellAppend(sheet, sheet.selectedCell, " ", 1);
-          }
-          else if (stringsEqual("Return", 6, keyPressed)) {
-            sheetCellAppend(sheet, sheet.selectedCell, "\n", 1);
-          }
           else if (stringsEqual("BackSpace", 9, keyPressed)) {
             sheetCellBackSpace(sheet, sheet.selectedCell, sheet.strings.data[sheet.selectedCell].length - 1);
           }
           else {
-            char valueToInsert = *keyPressed;
-            if (program.shiftDown) {
-              valueToInsert = keyToUpper(*keyPressed);
-            }
-            int valueToInsertLength = 1;
+            printf("translatedChar (to be inserted): %s\n", translatedChar);
+            char valueToInsert = *translatedChar;
+            int valueToInsertLength = translatedCharLength;
             sheetCellAppend(sheet, sheet.selectedCell, &valueToInsert, valueToInsertLength);
             program.lastTextInserted = stringInsertChar(program.lastTextInserted, valueToInsert, program.lastTextInserted.length);
           }
@@ -817,6 +814,7 @@ int main() {
 // '.' doesnt work for certain input operations, i think my string handling is broken
 //
 // Done:
+// Use the following field to determine shift state when determining capital letters: event.xkey.state. In fact, seems that XLookupString might account for shift/caps lock state and perhaps this should be used for converting key events to a string/character. Currently, caps lock does not result in capital letters.
 // centre view
 // handle space insertions properly
 // add a gap between cells
