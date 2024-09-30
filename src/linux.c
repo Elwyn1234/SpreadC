@@ -16,6 +16,16 @@
 #include <pango/pangocairo.h>
 #include <cairo/cairo-xlib.h>
 // I have manually copied pango into /usr/include/. The same may have to be done for glib. It seems that xlibs font rendering uses X's core font rendering (at least by default) which is not modern and doesn't do things like anti-aliasing (I think) and which is why I am looking to pango. Pango builds on Xft which is also apparently not that modern. Sounds like pango is the go to low level library for font rendering.
+#define BACKSPACE                     0x0008
+#define TAB                           0x0009
+#define LINEFEED                      0x000a
+#define CLEAR                         0x000b
+#define RETURN                        0x000d
+#define PAUSE                         0x0013
+#define SCROLL_LOCK                   0x0014
+#define SYS_REQ                       0x0015
+#define ESCAPE                        0x001b
+#define DELETE                        0x00ff
 
 typedef char Boolean;
 typedef struct Color {
@@ -30,6 +40,24 @@ typedef struct String {
   int length;
 } String;
 
+typedef enum NORMAL_MODE_ACTION {
+  COLUMN_LEFT,
+  COLUMN_RIGHT,
+  ROW_UP,
+  ROW_DOWN,
+  INSERT_BEGIN,
+  INSERT_TEXT,
+  APPEND_COLUMN,
+  INSERT_COLUMN,
+  APPEND_ROW,
+  INSERT_ROW,
+}NORMAL_MODE_ACTION;
+
+typedef struct Action {
+  NORMAL_MODE_ACTION action;
+  String text;
+} Action;
+
 typedef struct Program {
   Display *display;
   Window window;
@@ -42,9 +70,7 @@ typedef struct Program {
   XColor foreground;
   Color text;
 
-  Boolean shiftDown;
-  char lastCharKeyPressed;
-  String lastTextInserted;
+  Action lastAction;
 } Program;
 
 
@@ -253,13 +279,17 @@ void dynamicIntArrayRemove(DynamicIntArray *array, int element, int index) {
 //******************************************//
 
 typedef struct Sheet {
-  DynamicIntArray cellWidths;
-  DynamicIntArray cellHeights;
   DynamicStringArray strings;
   int columnCount;
   int rowCount;
+
+  // Split fields into SheetCursor struct
   int selectedCell;
   Boolean insertMode;
+
+  // Split fields into SheetFormat struct
+  DynamicIntArray cellWidths;
+  DynamicIntArray cellHeights;
   int verticalPadding;
   int horizontalPadding;
 } Sheet;
@@ -334,68 +364,62 @@ void sheetCellAppend(Sheet sheet, int cellIndex, char* valueToInsert, int valueT
   sheet.strings.data[cellIndex] = str;
 }
 
-char handleNormalModeInput(Sheet *sheet, char charKeyPressed, Boolean useRecordedCommand, char lastCharKeyPressed, String text) {
-  switch (charKeyPressed) {
-    case 'h': {
+
+
+////////////////////////////////////////////////////////////////////////
+// NORMAL MODE ACTIONS
+////////////////////////////////////////////////////////////////////////
+void normalModeAction(Sheet *sheet, Action action) {
+  switch (action.action) {
+    case COLUMN_LEFT: {
       sheet->selectedCell -= 1;
       break;
     }
-    case 'j': {
+    case ROW_DOWN: {
       sheet->selectedCell += sheet->columnCount;
       break;
     }
-    case 'k': {
+    case ROW_UP: {
       sheet->selectedCell -= sheet->columnCount;
       break;
     }
-    case 'l': {
+    case COLUMN_RIGHT: {
       sheet->selectedCell += 1;
       break;
     }
-    case 'i': {
-      if (useRecordedCommand && text.length) {
-        sheetCellAppend(*sheet, sheet->selectedCell, text.value, text.length);
-      }
-      else {
-        sheet->insertMode = TRUE;
-      }
-      lastCharKeyPressed = 'i';
+    case INSERT_BEGIN: {
+      sheet->insertMode = TRUE;
       // INSERT MODE AT THE START OF THE STRING. Maybe ii does this, i puts you in "normal text mode" as opposed to "normal sheet mode"
       break;
     }
+    case INSERT_TEXT:
+      sheetCellAppend(*sheet, sheet->selectedCell, action.text.value, action.text.length);
+      break;
     /* case 'I': { */
     /*   sheet->insertMode = TRUE; */
     /*   // INSERT MODE AT THE END OF THE STRING */
     /*   break; */
     /* } */
-    case 'a': {
+    case APPEND_COLUMN: {
       sheetAppendColumn(sheet, sheet->selectedCell + 1);
       int selectedRow = sheet->selectedCell / (sheet->columnCount - 1);
       sheet->selectedCell += selectedRow + 1; // sheetAppendColumn will add insert a cell for each row
-      lastCharKeyPressed = 'a';
       break;
     }
-    case 'A': {
+    case INSERT_COLUMN: {
       // INSERT NEW COLUMN
       sheetAppendColumn(sheet, sheet->selectedCell);
       int selectedRow = sheet->selectedCell / (sheet->columnCount - 1);
       sheet->selectedCell += selectedRow; // sheetAppendColumn will add insert a cell for each row
-      lastCharKeyPressed = 'A';
       break;
     }
-    case 'o': {
+    case APPEND_ROW: {
       sheetAppendRow(sheet, sheet->selectedCell + sheet->columnCount);
       sheet->selectedCell += sheet->columnCount;
-      lastCharKeyPressed = 'o';
       break;
     }
-    case 'O': {
+    case INSERT_ROW: {
       sheetAppendRow(sheet, sheet->selectedCell);
-      lastCharKeyPressed = 'O';
-      break;
-    }
-    case '.': { // TODO
-      handleNormalModeInput(sheet, lastCharKeyPressed, TRUE, 0, text);
       break;
     }
     /* case '$': { // TODO */
@@ -419,8 +443,6 @@ char handleNormalModeInput(Sheet *sheet, char charKeyPressed, Boolean useRecorde
     /*   break; */
     /* } */
   }
-  printf("lastCharKeyPressed: %c\n", lastCharKeyPressed);
-  return lastCharKeyPressed;
 }
 
 
@@ -693,10 +715,7 @@ int main() {
 
   Sheet sheet = newSheet(3, 3);
   sheetCellAppend(sheet, 0, "helyo", 5);
-  sheetCellAppend(sheet, 10, "helyo", 5);
-  sheetCellAppend(sheet, 20, "helyo", 5);
-  sheetCellAppend(sheet, 21, "helyo", 5);
-  sheet.selectedCell = 11;
+  sheet.selectedCell = 0;
 
   Screen *screen = XScreenOfDisplay(display, screen_number);
   int width = XWidthOfScreen(screen);
@@ -723,6 +742,12 @@ int main() {
     XNextEvent(display, &event);
 
     switch (event.type) {
+
+
+
+      //////////////////////////////////////////////////////////////////
+      // Expose
+      //////////////////////////////////////////////////////////////////
       case Expose: {
         render(program, sheet);
         break;
@@ -753,56 +778,176 @@ int main() {
         */
 
       }
+
+
+
+      //////////////////////////////////////////////////////////////////
+      // KeyPress
+      //////////////////////////////////////////////////////////////////
       case KeyPress: {
-        char *translatedChar = calloc(100, sizeof(char));
-        int translatedCharLength = XLookupString(&event.xkey, translatedChar, 100, NULL, NULL);
-        KeySym keysym = XLookupKeysym(&event.xkey, 0);
-        char *untranslatedChar = XKeysymToString(keysym);
-
-        printf("\n");
-        printf("[DEBUG] untranslatedChar: %s\n", untranslatedChar);
-        printf("[DEBUG] translatedChar: %s\n", translatedChar);
-
-        if (!untranslatedChar)
-          break;
-        if (stringsEqual("Shift_L", 7, untranslatedChar)) {
-          program.shiftDown = TRUE;
+        char *translatedCharArray = calloc(100, sizeof(char));
+        int translatedCharLength = XLookupString(&event.xkey, translatedCharArray, 100, NULL, NULL);
+        char translatedChar = translatedCharArray[0];
+        if (translatedCharLength == 0) {
           break;
         }
 
+        printf("\n");
+        printf("[DEBUG] translatedChar: %s\n", translatedCharArray);
+        printf("[DEBUG] translatedChar (hex): %x\n", translatedChar);
+        printf("[DEBUG] translatedCharLength: %d\n", translatedCharLength);
+        printf("[DEBUG] event.xkey.state (hex): %x\n", event.xkey.state);
+        printf("[DEBUG] event.xkey.state (hex): %x\n", event.xkey.state & ShiftMask);
 
-        if (sheet.insertMode == TRUE && !IsModifierKey(keysym) && !IsFunctionKey(keysym)) {
-          if (stringsEqual("Escape", 6, untranslatedChar)) {
+        if (event.xkey.state & LockMask) {
+          printf("[DEBUG] LockMask registered that Lock is on\n");
+        }
+        if (event.xkey.state & ControlMask) {
+          printf("[DEBUG] ControlMask registered that Control is held\n");
+        }
+        if (event.xkey.state & ShiftMask) {
+          printf("[DEBUG] ShiftMask registered that Shift is held\n");
+        }
+
+
+
+        ////////////////////////////////////////////////////////////////
+        // INSERT MODE
+        ////////////////////////////////////////////////////////////////
+        if (sheet.insertMode == TRUE) {
+          if (translatedChar == ESCAPE) {
             sheet.insertMode = FALSE;
             break;
           }
-          else if (stringsEqual("BackSpace", 9, untranslatedChar)) {
+          else if (translatedChar == BACKSPACE) {
             sheetCellBackSpace(sheet, sheet.selectedCell, sheet.strings.data[sheet.selectedCell].length - 1);
           }
+          else if (translatedChar < 0x20 || translatedChar == 0x7F) {
+            break;
+            // Not sure if this is a good blanket solution but doing
+            // this to prevent ctrl chars being rendered to the
+            // screen by typing e.g. CTRL-K or DELETE
+            // is this an exhaustive list of ctrl chars?
+          }
           else {
-            printf("translatedChar (to be inserted): %s\n", translatedChar);
-            char valueToInsert = *translatedChar;
-            int valueToInsertLength = translatedCharLength;
-            sheetCellAppend(sheet, sheet.selectedCell, &valueToInsert, valueToInsertLength);
-            program.lastTextInserted = stringInsertChar(program.lastTextInserted, valueToInsert, program.lastTextInserted.length);
+            sheetCellAppend(sheet, sheet.selectedCell, &translatedChar, translatedCharLength);
+            program.lastAction.text = stringInsertChar(program.lastAction.text, translatedChar, program.lastAction.text.length);
           }
         }
+
+
+
+        ////////////////////////////////////////////////////////////////
+        // NORMAL MODE
+        ////////////////////////////////////////////////////////////////
         else {
-          program.lastCharKeyPressed = handleNormalModeInput(&sheet, translatedChar[0], FALSE, program.lastCharKeyPressed, program.lastTextInserted);
+          {
+            Action action = {0};
+            switch (translatedChar) {
+              case 'h': {
+                action.action = COLUMN_LEFT;
+                normalModeAction(&sheet, action);
+                break;
+              }
+              case 'j': {
+                action.action = ROW_DOWN;
+                normalModeAction(&sheet, action);
+                break;
+              }
+              case 'k': {
+                action.action = ROW_UP;
+                normalModeAction(&sheet, action);
+                break;
+              }
+              case 'l': {
+                action.action = COLUMN_RIGHT;
+                normalModeAction(&sheet, action);
+                break;
+              }
+              case 'i': {
+                action.action = INSERT_BEGIN;
+                normalModeAction(&sheet, action);
+                program.lastAction = action;
+                program.lastAction.action = INSERT_TEXT;
+                break;
+              }
+              /* case 'I': { */
+              /*   sheet.insertMode = TRUE; */
+              /*   // INSERT MODE AT THE END OF THE STRING */
+              /*   break; */
+              /* } */
+              case 'a': {
+                action.action = APPEND_COLUMN;
+                normalModeAction(&sheet, action);
+                program.lastAction = action;
+                break;
+              }
+              case 'A': {
+                action.action = INSERT_COLUMN;
+                normalModeAction(&sheet, action);
+                program.lastAction = action;
+                break;
+              }
+              case 'o': {
+                action.action = APPEND_ROW;
+                normalModeAction(&sheet, action);
+                program.lastAction = action;
+                break;
+              }
+              case 'O': {
+                action.action = INSERT_ROW;
+                normalModeAction(&sheet, action);
+                program.lastAction = action;
+                break;
+              }
+              case '.': { // TODO
+                normalModeAction(&sheet, program.lastAction);
+                break;
+              }
+              /* case '$': { // TODO */
+              /*   sheetAppendRow(&sheet, sheet->selectedCell); */
+              /*   break; */
+              /* } */
+              /* case 'e': { // TODO */
+              /*   sheetAppendRow(&sheet, sheet->selectedCell); */
+              /*   break; */
+              /* } */
+              /* case 'Input.CTRL_E': { // TODO */
+              /*   sheetAppendRow(&sheet, sheet->selectedCell); */
+              /*   break; */
+              /* } */
+              /* case 'y???': { // TODO */
+              /*   sheetAppendRow(&sheet, sheet->selectedCell); */
+              /*   break; */
+              /* } */
+              /* case 'Input.CTRL_Y': { // TODO */
+              /*   sheetAppendRow(&sheet, sheet->selectedCell); */
+              /*   break; */
+              /* } */
+            }
+          }
         }
         render(program, sheet);
         break;
       }
+
+
+      //////////////////////////////////////////////////////////////////
+      // KeyRelease
+      //////////////////////////////////////////////////////////////////
       case KeyRelease: {
         KeySym keysym = XLookupKeysym(&event.xkey, 0);
         char *keyReleased = XKeysymToString(keysym);
         if (!keyReleased)
           break;
-        if (stringsEqual("Shift_L", 7, keyReleased)) {
-          program.shiftDown = FALSE;
-        }
         break;
       }
+
+
+
+      //////////////////////////////////////////////////////////////////
+      // ButtonPress
+      //////////////////////////////////////////////////////////////////
       case ButtonPress: {
         if (event.xbutton.button == Button1) {
           printf("Button1 press\n");
@@ -841,4 +986,11 @@ int main() {
 // Requirements:
 // Edit cells
 // add rows and columns
+//
+// NOTES - TEXT INPUT:
+// Supported
+//   - Latin-1
+//   - the renderer support UTF-8 although the input manager does not (only supports Latin-1)
+// Unsupported
+//   - Is Euro sign support (i.e. shift-alt-4 or whatever it is)
 //
