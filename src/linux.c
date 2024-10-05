@@ -447,7 +447,7 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       XGetWindowAttributes(program.display, program.window, &winAttribs);
       int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
 
-      sheet->selectedCell = maxRowsOnScreen / 2 * sheet->columnCount + sheet->selectedCell % sheet->columnCount;
+      sheet->selectedCell = viewport->anchorCell + maxRowsOnScreen / 2 * sheet->columnCount + sheet->selectedCell % sheet->columnCount;
       break;
     }
     case SELECTED_CELL_BOTTOM: {
