@@ -74,8 +74,8 @@ enum NORMAL_MODE_ACTION {
   VIEWPORT_ROW_DOWN,
   VIEWPORT_COLUMN_LEFT,
   VIEWPORT_COLUMN_RIGHT,
-  VIEWPORT_COLUMN_LEFT_PAGE,
-  VIEWPORT_COLUMN_RIGHT_PAGE,
+  VIEWPORT_COLUMN_LEFT_HALF_PAGE,
+  VIEWPORT_COLUMN_RIGHT_HALF_PAGE,
   VIEWPORT_PAGE_UP,
   VIEWPORT_PAGE_DOWN,
   VIEWPORT_HALF_PAGE_UP,
@@ -507,7 +507,7 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       viewport->anchorColumn --;
       break;
     }
-    case VIEWPORT_COLUMN_LEFT_PAGE: {
+    case VIEWPORT_COLUMN_LEFT_HALF_PAGE: {
       PangoLayout *layout = initialisePangoLayout(program);
       int textWidthPixels = calculateTextWidthPixels(layout);
       int cellWidthPixels = calculateCellWidthPixels(textWidthPixels, *sheet);
@@ -515,7 +515,7 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       XGetWindowAttributes(program.display, program.window, &winAttribs);
       int maxColumnsOnScreen = calculateMaxColumnsOnScreen(winAttribs, cellWidthPixels);
 
-      viewport->anchorColumn -= maxColumnsOnScreen;
+      viewport->anchorColumn -= maxColumnsOnScreen / 2;
 
       int selectedColumn = viewport->anchorColumn + maxColumnsOnScreen - 1;
       selectedColumn = clamp(selectedColumn, 0, sheet->columnCount);
@@ -524,7 +524,7 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
 
       break;
     }
-    case VIEWPORT_COLUMN_RIGHT_PAGE: {
+    case VIEWPORT_COLUMN_RIGHT_HALF_PAGE: {
       PangoLayout *layout = initialisePangoLayout(program);
       int textWidthPixels = calculateTextWidthPixels(layout);
       int cellWidthPixels = calculateCellWidthPixels(textWidthPixels, *sheet);
@@ -532,7 +532,7 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       XGetWindowAttributes(program.display, program.window, &winAttribs);
       int maxColumnsOnScreen = calculateMaxColumnsOnScreen(winAttribs, cellWidthPixels);
 
-      viewport->anchorColumn += maxColumnsOnScreen;
+      viewport->anchorColumn += maxColumnsOnScreen / 2;
 
       int selectedColumn = viewport->anchorColumn;
       selectedColumn = clamp(selectedColumn, 0, sheet->columnCount);
@@ -1237,12 +1237,12 @@ int main() {
                   break;
                 }
                 case 'B': {
-                  action.action = VIEWPORT_COLUMN_LEFT_PAGE;
+                  action.action = VIEWPORT_COLUMN_LEFT_HALF_PAGE;
                   normalModeAction(&sheet, &viewport, action);
                   break;
                 }
                 case 'E': {
-                  action.action = VIEWPORT_COLUMN_RIGHT_PAGE;
+                  action.action = VIEWPORT_COLUMN_RIGHT_HALF_PAGE;
                   normalModeAction(&sheet, &viewport, action);
                   break;
                 }
@@ -1374,8 +1374,8 @@ int main() {
 // - '.' doesnt work for certain input operations, i think my string handling is broken
 //
 // Done:
-// - Add VIEWPORT_COLUMN_RIGHT_PAGE('E')
-// - Add VIEWPORT_COLUMN_LEFT_PAGE('B')
+// - Add VIEWPORT_COLUMN_RIGHT_HALF_PAGE('E')
+// - Add VIEWPORT_COLUMN_LEFT_HALF_PAGE('B')
 // - Add VIEWPORT_COLUMN_RIGHT('e')
 // - Add VIEWPORT_COLUMN_LEFT('b')
 // - $
