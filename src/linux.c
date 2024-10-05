@@ -62,6 +62,7 @@ enum NORMAL_MODE_ACTION {
   COLUMN_RIGHT,
   ROW_UP,
   ROW_DOWN,
+  CENTRE_SELECTED_CELL,
   VIEWPORT_ROW_UP,
   VIEWPORT_ROW_DOWN,
   VIEWPORT_PAGE_UP,
@@ -435,6 +436,17 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
     }
     case COLUMN_RIGHT: {
       sheet->selectedCell += 1;
+      break;
+    }
+    case CENTRE_SELECTED_CELL: {
+      PangoLayout *layout = initialisePangoLayout(program);
+      int textHeightPixels = calculateTextHeightPixels(layout);
+      int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);
+      XWindowAttributes winAttribs = {0};
+      XGetWindowAttributes(program.display, program.window, &winAttribs);
+      int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
+
+      sheet->selectedCell = maxRowsOnScreen / 2 * sheet->columnCount + sheet->selectedCell % sheet->columnCount;
       break;
     }
     case VIEWPORT_ROW_UP: {
@@ -1074,6 +1086,11 @@ int main() {
                   normalModeAction(&sheet, &viewport, action);
                   break;
                 }
+                case 'M': {
+                  action.action = CENTRE_SELECTED_CELL;
+                  normalModeAction(&sheet, &viewport, action);
+                  break;
+                }
                 case 'y': {
                   /*action.action = FIND_CELL;*/
                   /*normalModeAction(&sheet, &viewport, action);*/
@@ -1189,10 +1206,12 @@ int main() {
 
 
 // TODO: 
+// - l - bug fix - when at the furthest right column, do not change the selectedCell
 // - CTRL-l
-// - M
+// - CTRL-h
 // - g<count>
 // - gg
+// - G
 // - clamp the viewport before rendering
 // - ignore function keys
 // - make the renderer render things relative to a point so that a cells text, extents, etc are all 'stuck' together
@@ -1202,6 +1221,7 @@ int main() {
 // - '.' doesnt work for certain input operations, i think my string handling is broken
 //
 // Done:
+// - M
 // - VIEWPORT_HALF_PAGE_UP ('CTRL-u')
 // - VIEWPORT_HALF_PAGE_DOWN ('CTRL-d')
 // - clamp viewport for ROW_UP
