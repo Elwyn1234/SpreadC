@@ -69,6 +69,7 @@ enum NORMAL_MODE_ACTION {
   SELECTED_CELL_END,
   VIEWPORT_ROW_UP,
   VIEWPORT_ROW_DOWN,
+  /*VIEWPORT_COLUMN_LEFT,*/
   VIEWPORT_PAGE_UP,
   VIEWPORT_PAGE_DOWN,
   VIEWPORT_HALF_PAGE_UP,
@@ -307,7 +308,8 @@ void dynamicIntArrayRemove(DynamicIntArray *array, int element, int index) {
 //******************************************//
 
 struct Viewport {
-  int anchorCell;
+  int anchorRow;
+  int anchorColumn;
   /*int maxCellCountTall;*/
   /*int maxCellCountWide;*/
   /*Boolean hasFocus;*/
@@ -420,21 +422,19 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
 
       sheet->selectedCell += sheet->columnCount;
-      int anchorRow = viewport->anchorCell / sheet->columnCount;
       int selectedRow = sheet->selectedCell / sheet->columnCount;
       // selectedToAnchor is the range from the selectedRow to the anchorRow. We add one to this because the range is inclusive
-      int selectedToAnchor = selectedRow - anchorRow + 1;
+      int selectedToAnchor = selectedRow - viewport->anchorRow + 1;
       if (selectedToAnchor > maxRowsOnScreen) {
-        viewport->anchorCell += sheet->columnCount;
+        viewport->anchorRow ++;
       }
       break;
     }
     case ROW_UP: {
       sheet->selectedCell -= sheet->columnCount;
-      int anchorRow = viewport->anchorCell / sheet->columnCount;
       int selectedRow = sheet->selectedCell / sheet->columnCount;
-      if (anchorRow > selectedRow) {
-        viewport->anchorCell = sheet->selectedCell;
+      if (viewport->anchorRow > selectedRow) {
+        viewport->anchorRow --;
       }
       break;
     }
@@ -450,12 +450,16 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       XGetWindowAttributes(program.display, program.window, &winAttribs);
       int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
 
-      sheet->selectedCell = viewport->anchorCell + maxRowsOnScreen / 2 * sheet->columnCount + sheet->selectedCell % sheet->columnCount;
+      /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/
+      int topmostRow = viewport->anchorRow;
+      sheet->selectedCell = topmostRow * sheet->columnCount + maxRowsOnScreen / 2 * sheet->columnCount + sheet->selectedCell % sheet->columnCount;
       break;
     }
     case SELECTED_CELL_TOP: {
+      /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/
+      int topmostRow = viewport->anchorRow;
       int columnShift = sheet->selectedCell % sheet->columnCount;
-      sheet->selectedCell = viewport->anchorCell + columnShift;
+      sheet->selectedCell = topmostRow * sheet->columnCount + columnShift;
       break;
     }
     case SELECTED_CELL_BOTTOM: {
@@ -466,9 +470,11 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       XGetWindowAttributes(program.display, program.window, &winAttribs);
       int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
 
+      /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/
+      int topmostRow = viewport->anchorRow;
       int rowShift = maxRowsOnScreen * sheet->columnCount - sheet->columnCount;
       int columnShift = sheet->selectedCell % sheet->columnCount;
-      sheet->selectedCell = viewport->anchorCell + rowShift + columnShift;
+      sheet->selectedCell = topmostRow * sheet->columnCount + rowShift + columnShift;
       break;
     }
     case SELECTED_CELL_BEGINNING: {
@@ -480,13 +486,17 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       break;
     }
     case VIEWPORT_ROW_UP: {
-      viewport->anchorCell -= sheet->columnCount;
+      viewport->anchorRow --;
       break;
     }
     case VIEWPORT_ROW_DOWN: {
-      viewport->anchorCell += sheet->columnCount;
+      viewport->anchorRow ++;
       break;
     }
+    /*case VIEWPORT_COLUMN_LEFT: {*/
+    /*  viewport->anchorColumn --;*/
+    /*  break;*/
+    /*}*/
     case VIEWPORT_PAGE_UP: {
       PangoLayout *layout = initialisePangoLayout(program);
       int textHeightPixels = calculateTextHeightPixels(layout);
@@ -494,11 +504,13 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       XWindowAttributes winAttribs = {0};
       XGetWindowAttributes(program.display, program.window, &winAttribs);
       int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
-      viewport->anchorCell -= maxRowsOnScreen * sheet->columnCount;
+      viewport->anchorRow -= maxRowsOnScreen;
 
       int rowShift = maxRowsOnScreen * sheet->columnCount - sheet->columnCount;
       int columnShift = sheet->selectedCell % sheet->columnCount;
-      sheet->selectedCell = viewport->anchorCell + rowShift + columnShift;
+      /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/
+      int topmostRow = viewport->anchorRow;
+      sheet->selectedCell = topmostRow * sheet->columnCount + rowShift + columnShift;
       break;
     }
     case VIEWPORT_PAGE_DOWN: {
@@ -508,8 +520,11 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       XWindowAttributes winAttribs = {0};
       XGetWindowAttributes(program.display, program.window, &winAttribs);
       int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
-      viewport->anchorCell += maxRowsOnScreen * sheet->columnCount;
-      sheet->selectedCell = viewport->anchorCell + sheet->selectedCell % sheet->columnCount;
+      viewport->anchorRow += maxRowsOnScreen;
+
+      /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/
+      int topmostRow = viewport->anchorRow;
+      sheet->selectedCell = topmostRow * sheet->columnCount + sheet->selectedCell % sheet->columnCount;
       break;
     }
     case VIEWPORT_HALF_PAGE_UP: {
@@ -520,19 +535,20 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       XGetWindowAttributes(program.display, program.window, &winAttribs);
       int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
 
-      viewport->anchorCell -= maxRowsOnScreen / 2 * sheet->columnCount;
+      viewport->anchorRow -= maxRowsOnScreen / 2;
       if (maxRowsOnScreen % 2 == 1) {
-        viewport->anchorCell -= sheet->columnCount;
+        viewport->anchorRow --;
       }
 
-      int anchorRow = viewport->anchorCell / sheet->columnCount;
       int selectedRow = sheet->selectedCell / sheet->columnCount;
       // selectedToAnchor is the range from the selectedRow to the anchorRow. We add one to this because the range is inclusive
-      int selectedToAnchor = selectedRow - anchorRow + 1;
+      int selectedToAnchor = selectedRow - viewport->anchorRow + 1;
       if (selectedToAnchor > maxRowsOnScreen) {
         int rowShift = maxRowsOnScreen * sheet->columnCount - sheet->columnCount;
         int columnShift = sheet->selectedCell % sheet->columnCount;
-        sheet->selectedCell = viewport->anchorCell + rowShift + columnShift;
+        /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/
+        int topmostRow = viewport->anchorRow;
+        sheet->selectedCell = topmostRow * sheet->columnCount + rowShift + columnShift;
       }
 
       break;
@@ -545,15 +561,16 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       XGetWindowAttributes(program.display, program.window, &winAttribs);
       int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
 
-      viewport->anchorCell += maxRowsOnScreen / 2 * sheet->columnCount;
+      viewport->anchorRow += maxRowsOnScreen / 2;
       if (maxRowsOnScreen % 2 == 1) {
-        viewport->anchorCell += sheet->columnCount;
+        viewport->anchorRow ++;
       }
 
-      int anchorRow = viewport->anchorCell / sheet->columnCount;
       int selectedRow = sheet->selectedCell / sheet->columnCount;
-      if (anchorRow > selectedRow) {
-        sheet->selectedCell = viewport->anchorCell + sheet->selectedCell % sheet->columnCount;
+      if (viewport->anchorRow > selectedRow) {
+        /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/
+        int topmostRow = viewport->anchorRow;
+        sheet->selectedCell = topmostRow * sheet->columnCount + sheet->selectedCell % sheet->columnCount;
       }
       break;
     }
@@ -678,11 +695,11 @@ void render(Program program, Sheet sheet, Viewport *viewport) {
   }
   int xoffset = 0;
   int yoffset = 0;
-  printf("[DEBUG] viewport->anchorCell: %d\n", viewport->anchorCell);
   printf("[DEBUG] sheet.selectedCell: %d\n", sheet.selectedCell);
-  printf("[DEBUG] anchorRow: %d\n", viewport->anchorCell / sheet.columnCount);
   printf("[DEBUG] selectedRow: %d\n", sheet.selectedCell / sheet.columnCount);
-  yoffset -= 1 * viewport->anchorCell / sheet.columnCount * cellHeightPixels;
+  printf("[DEBUG] viewport->anchorRow: %d\n", viewport->anchorRow);
+  yoffset -= 1 * viewport->anchorRow * cellHeightPixels;
+  /*xoffset -= 1 * viewport->anchorCell % sheet.columnCount * cellWidthPixels;*/
   /*int xoffset = clamp((winAttribs.width - sheetWidth) / 2 - sheet.horizontalPadding, rowNumberColumnWidth, INT_MAX);*/
   /*int yoffset = clamp((winAttribs.height - sheetHeight) / 2 - sheet.verticalPadding, columnNumberRowHeight, INT_MAX);*/
   /*yoffset -= viewport->anchorCell / sheet.columnCount * cellHeightPixels;*/
@@ -927,7 +944,6 @@ int main() {
   sheet.selectedCell = 0;
 
   Viewport viewport = {0};
-  viewport.anchorCell = 0;
   /*viewport.maxCellCountTall = 3;*/
   /*viewport.maxCellCountWide = 3;*/
   /*viewport.hasFocus = TRUE;*/
@@ -1141,6 +1157,11 @@ int main() {
                   normalModeAction(&sheet, &viewport, action);
                   break;
                 }
+                /*case 'b': {*/
+                /*  action.action = VIEWPORT_COLUMN_LEFT;*/
+                /*  normalModeAction(&sheet, &viewport, action);*/
+                /*  break;*/
+                /*}*/
                 case 'y': {
                   /*action.action = FIND_CELL;*/
                   /*normalModeAction(&sheet, &viewport, action);*/
@@ -1256,6 +1277,10 @@ int main() {
 
 
 // TODO: 
+// - fix: VIEWPORT_ROW_DOWN does not clamp selected cell
+// - fix: VIEWPORT_ROW_UP does not clamp selected cell
+// - Add VIEWPORT_COLUMN_LEFT('b')
+// - Add VIEWPORT_COLUMN_RIGHT('e')
 // - g<motion>
 // - gg
 // - G
