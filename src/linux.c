@@ -40,8 +40,11 @@ typedef struct DynamicIntArray DynamicIntArray;
 
 PangoLayout *initialisePangoLayout(Program program);
 int calculateMaxRowsOnScreen(XWindowAttributes winAttribs, int cellHeightPixels);
+int calculateMaxColumnsOnScreen(XWindowAttributes winAttribs, int cellHeightPixels);
 int calculateTextHeightPixels(PangoLayout *layout);
+int calculateTextWidthPixels(PangoLayout *layout);
 int calculateCellHeightPixels(int textHeightPixels, Sheet sheet);
+int calculateCellWidthPixels(int textHeightPixels, Sheet sheet);
 
 Program program;
 
@@ -71,6 +74,7 @@ enum NORMAL_MODE_ACTION {
   VIEWPORT_ROW_DOWN,
   VIEWPORT_COLUMN_LEFT,
   VIEWPORT_COLUMN_RIGHT,
+  VIEWPORT_COLUMN_LEFT_PAGE,
   VIEWPORT_PAGE_UP,
   VIEWPORT_PAGE_DOWN,
   VIEWPORT_HALF_PAGE_UP,
@@ -502,6 +506,23 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       viewport->anchorColumn --;
       break;
     }
+    case VIEWPORT_COLUMN_LEFT_PAGE: {
+      PangoLayout *layout = initialisePangoLayout(program);
+      int textWidthPixels = calculateTextWidthPixels(layout);
+      int cellWidthPixels = calculateCellWidthPixels(textWidthPixels, *sheet);
+      XWindowAttributes winAttribs = {0};
+      XGetWindowAttributes(program.display, program.window, &winAttribs);
+      int maxColumnsOnScreen = calculateMaxColumnsOnScreen(winAttribs, cellWidthPixels);
+
+      viewport->anchorColumn -= maxColumnsOnScreen;
+
+      int selectedColumn = viewport->anchorColumn + maxColumnsOnScreen - 1;
+      selectedColumn = clamp(selectedColumn, 0, sheet->columnCount);
+      int selectedRow = sheet->selectedCell / sheet->columnCount;
+      sheet->selectedCell = selectedRow * sheet->columnCount + selectedColumn;
+
+      break;
+    }
     case VIEWPORT_PAGE_UP: {
       PangoLayout *layout = initialisePangoLayout(program);
       int textHeightPixels = calculateTextHeightPixels(layout);
@@ -670,10 +691,15 @@ int calculateCellHeightPixels(int textHeightPixels, Sheet sheet) {
 } 
 
 int calculateMaxRowsOnScreen(XWindowAttributes winAttribs, int cellHeightPixels) {
-  /*int maxRowsOnScreen = (winAttribs.height - cellHeightPixels) / cellHeightPixels;*/
   int maxRowsOnScreen = (winAttribs.height) / cellHeightPixels;
 
   return maxRowsOnScreen;
+}
+
+int calculateMaxColumnsOnScreen(XWindowAttributes winAttribs, int cellWidthPixels) {
+  int maxColumnsOnScreen = (winAttribs.width) / cellWidthPixels;
+
+  return maxColumnsOnScreen;
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -1172,6 +1198,11 @@ int main() {
                   normalModeAction(&sheet, &viewport, action);
                   break;
                 }
+                case 'B': {
+                  action.action = VIEWPORT_COLUMN_LEFT_PAGE;
+                  normalModeAction(&sheet, &viewport, action);
+                  break;
+                }
                 case 'y': {
                   /*action.action = FIND_CELL;*/
                   /*normalModeAction(&sheet, &viewport, action);*/
@@ -1282,6 +1313,7 @@ int main() {
 
 
 // TODO: 
+// - Add VIEWPORT_COLUMN_RIGHT_PAGE('E')
 // - fix: VIEWPORT_ROW_DOWN does not clamp selected cell
 // - fix: VIEWPORT_ROW_UP does not clamp selected cell
 // - fix: VIEWPORT_COLUMN_LEFT does not clamp selected cell
@@ -1300,6 +1332,7 @@ int main() {
 // - '.' doesnt work for certain input operations, i think my string handling is broken
 //
 // Done:
+// - Add VIEWPORT_COLUMN_LEFT_PAGE('B')
 // - Add VIEWPORT_COLUMN_RIGHT('e')
 // - Add VIEWPORT_COLUMN_LEFT('b')
 // - $
