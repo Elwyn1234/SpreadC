@@ -65,6 +65,7 @@ enum NORMAL_MODE_ACTION {
   SELECTED_CELL_CENTRE,
   SELECTED_CELL_TOP,
   SELECTED_CELL_BOTTOM,
+  SELECTED_CELL_BEGINNING,
   VIEWPORT_ROW_UP,
   VIEWPORT_ROW_DOWN,
   VIEWPORT_PAGE_UP,
@@ -467,6 +468,10 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       int rowShift = maxRowsOnScreen * sheet->columnCount - sheet->columnCount;
       int columnShift = sheet->selectedCell % sheet->columnCount;
       sheet->selectedCell = viewport->anchorCell + rowShift + columnShift;
+      break;
+    }
+    case SELECTED_CELL_BEGINNING: {
+      sheet->selectedCell -= sheet->selectedCell % sheet->columnCount;
       break;
     }
     case VIEWPORT_ROW_UP: {
@@ -912,7 +917,7 @@ int main() {
   }
   */
 
-  Sheet sheet = newSheet(13, 1);
+  Sheet sheet = newSheet(13, 5);
   sheetCellAppend(sheet, 0, "helyo", 5);
   sheet.selectedCell = 0;
 
@@ -1121,6 +1126,11 @@ int main() {
                   normalModeAction(&sheet, &viewport, action);
                   break;
                 }
+                case '0': {
+                  action.action = SELECTED_CELL_BEGINNING;
+                  normalModeAction(&sheet, &viewport, action);
+                  break;
+                }
                 case 'y': {
                   /*action.action = FIND_CELL;*/
                   /*normalModeAction(&sheet, &viewport, action);*/
@@ -1236,6 +1246,7 @@ int main() {
 
 
 // TODO: 
+// - $
 // - g<motion>
 // - gg
 // - G
@@ -1250,6 +1261,7 @@ int main() {
 // - '.' doesnt work for certain input operations, i think my string handling is broken
 //
 // Done:
+// - 0
 // - l - bug fix - when at the furthest right column, do not change the selectedCell
 // - H
 // - L
