@@ -70,6 +70,7 @@ enum NORMAL_MODE_ACTION {
   VIEWPORT_ROW_UP,
   VIEWPORT_ROW_DOWN,
   VIEWPORT_COLUMN_LEFT,
+  VIEWPORT_COLUMN_RIGHT,
   VIEWPORT_PAGE_UP,
   VIEWPORT_PAGE_DOWN,
   VIEWPORT_HALF_PAGE_UP,
@@ -491,6 +492,10 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
     }
     case VIEWPORT_ROW_DOWN: {
       viewport->anchorRow ++;
+      break;
+    }
+    case VIEWPORT_COLUMN_RIGHT: {
+      viewport->anchorColumn ++;
       break;
     }
     case VIEWPORT_COLUMN_LEFT: {
@@ -1157,17 +1162,17 @@ int main() {
                   normalModeAction(&sheet, &viewport, action);
                   break;
                 }
+                case 'e': {
+                  action.action = VIEWPORT_COLUMN_RIGHT;
+                  normalModeAction(&sheet, &viewport, action);
+                  break;
+                }
                 case 'b': {
                   action.action = VIEWPORT_COLUMN_LEFT;
                   normalModeAction(&sheet, &viewport, action);
                   break;
                 }
                 case 'y': {
-                  /*action.action = FIND_CELL;*/
-                  /*normalModeAction(&sheet, &viewport, action);*/
-                  break;
-                }
-                case 'e': {
                   /*action.action = FIND_CELL;*/
                   /*normalModeAction(&sheet, &viewport, action);*/
                   break;
@@ -1279,7 +1284,8 @@ int main() {
 // TODO: 
 // - fix: VIEWPORT_ROW_DOWN does not clamp selected cell
 // - fix: VIEWPORT_ROW_UP does not clamp selected cell
-// - Add VIEWPORT_COLUMN_RIGHT('e')
+// - fix: VIEWPORT_COLUMN_LEFT does not clamp selected cell
+// - fix: VIEWPORT_COLUMN_RIGHT does not clamp selected cell
 // - g<motion>
 // - gg
 // - G
@@ -1294,6 +1300,7 @@ int main() {
 // - '.' doesnt work for certain input operations, i think my string handling is broken
 //
 // Done:
+// - Add VIEWPORT_COLUMN_RIGHT('e')
 // - Add VIEWPORT_COLUMN_LEFT('b')
 // - $
 // - 0
