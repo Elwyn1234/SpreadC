@@ -33,6 +33,7 @@ typedef struct Color Color;
 typedef char Boolean;
 typedef struct String String; 
 typedef enum NORMAL_MODE_ACTION NORMAL_MODE_ACTION;
+typedef enum MOTION MOTION;
 typedef struct Action Action;
 typedef struct Program Program;
 typedef struct DynamicStringArray DynamicStringArray;
@@ -61,7 +62,7 @@ struct String {
 };
 
 enum NORMAL_MODE_ACTION {
-  COLUMN_LEFT,
+  COLUMN_LEFT = 1,
   COLUMN_RIGHT,
   ROW_UP,
   ROW_DOWN,
@@ -80,6 +81,7 @@ enum NORMAL_MODE_ACTION {
   VIEWPORT_PAGE_DOWN,
   VIEWPORT_HALF_PAGE_UP,
   VIEWPORT_HALF_PAGE_DOWN,
+  VIEWPORT_GO_TO,
   INSERT_BEGIN,
   INSERT_TEXT,
   APPEND_COLUMN,
@@ -88,8 +90,14 @@ enum NORMAL_MODE_ACTION {
   INSERT_ROW,
 };
 
+enum MOTION {
+  SHEET_TOP = 1,
+};
+
 struct Action {
   NORMAL_MODE_ACTION action;
+  int count;
+  MOTION motion;
   String text;
 };
 
@@ -106,6 +114,7 @@ struct Program {
   Color text;
 
   Action lastAction;
+  Action currentAction;
 };
 
 
@@ -113,6 +122,17 @@ struct Program {
 //******************************************//
 //                   Util                   //
 //******************************************//
+
+void assert(char value, char *assertionMessage) {
+  if (! value) {
+    printf("[ASSERT] %s\n", assertionMessage);
+    exit(1);
+    // TODO: NEVER ASSERT IF PRODUCTION
+    // TODO: WRITE CUSTOM EXIT FUNCTION
+    // TODO: HOW TO PRINT STACK TRACE
+    // TODO: HOW TO CORE DUMP
+  }
+}
 
 char keyToUpper(char key) {
   if (key > 96 && key < 123) {
@@ -155,6 +175,16 @@ String intToLetters(int number) {
     number /= 26;
   }
   return string;
+}
+
+int clampToValue(int number, int lower, int higher, int value) {
+  if (number < lower) {
+    return value;
+  }
+  if (number > higher) {
+    return value;
+  }
+  return number;
 }
 
 int clamp(int number, int lower, int higher) {
@@ -616,6 +646,22 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
         int topmostRow = viewport->anchorRow;
         sheet->selectedCell = topmostRow * sheet->columnCount + sheet->selectedCell % sheet->columnCount;
       }
+      break;
+    }
+    case VIEWPORT_GO_TO: {
+      PangoLayout *layout = initialisePangoLayout(program);
+      int textHeightPixels = calculateTextHeightPixels(layout);
+      int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);
+      XWindowAttributes winAttribs = {0};
+      XGetWindowAttributes(program.display, program.window, &winAttribs);
+      int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
+
+      switch (action.motion) {
+        case SHEET_TOP:
+          sheet->selectedCell = sheet->selectedCell % sheet->columnCount;
+          viewport->anchorRow = clampToValue(viewport->anchorRow, -maxRowsOnScreen, 0, 0);
+      }
+
       break;
     }
     case INSERT_BEGIN: {
@@ -1246,6 +1292,26 @@ int main() {
                   normalModeAction(&sheet, &viewport, action);
                   break;
                 }
+                case 'g': {
+                  if (program.currentAction.action != 0) {
+                    program.currentAction.motion = SHEET_TOP;
+                    normalModeAction(&sheet, &viewport, program.currentAction);
+                    Action action = {0};
+                    program.currentAction = action;
+                  }
+                  else if (program.currentAction.count != 0) {
+                    program.currentAction.action = VIEWPORT_GO_TO;
+                    normalModeAction(&sheet, &viewport, action);
+                    Action action = {0};
+                    program.currentAction = action;
+                  }
+                  else {
+                    Action action = {0};
+                    program.currentAction = action;
+                    program.currentAction.action = VIEWPORT_GO_TO;
+                  }
+                  break;
+                }
                 case 'y': {
                   /*action.action = FIND_CELL;*/
                   /*normalModeAction(&sheet, &viewport, action);*/
@@ -1361,7 +1427,6 @@ int main() {
 // - fix: VIEWPORT_COLUMN_LEFT does not clamp selected cell
 // - fix: VIEWPORT_COLUMN_RIGHT does not clamp selected cell
 // - g<motion>
-// - gg
 // - G
 // - d<motion>
 // - dd
@@ -1374,6 +1439,7 @@ int main() {
 // - '.' doesnt work for certain input operations, i think my string handling is broken
 //
 // Done:
+// - gg
 // - Add VIEWPORT_COLUMN_RIGHT_HALF_PAGE('E')
 // - Add VIEWPORT_COLUMN_LEFT_HALF_PAGE('B')
 // - Add VIEWPORT_COLUMN_RIGHT('e')
