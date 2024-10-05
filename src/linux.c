@@ -1137,6 +1137,26 @@ int main() {
                   normalModeAction(&sheet, &viewport, action);
                   break;
                 }
+                case XK_j: {
+                  action.action = VIEWPORT_ROW_DOWN;
+                  normalModeAction(&sheet, &viewport, action);
+                  break;
+                }
+                case XK_k: {
+                  action.action = VIEWPORT_ROW_UP;
+                  normalModeAction(&sheet, &viewport, action);
+                  break;
+                }
+                case XK_l: { // TODO: CLASHES WITH vim's action - REDRAW_SCREEN
+                  action.action = VIEWPORT_COLUMN_RIGHT;
+                  normalModeAction(&sheet, &viewport, action);
+                  break;
+                }
+                case XK_h: {
+                  action.action = VIEWPORT_COLUMN_LEFT;
+                  normalModeAction(&sheet, &viewport, action);
+                  break;
+                }
                 case XK_b: {
                   action.action = VIEWPORT_PAGE_UP;
                   normalModeAction(&sheet, &viewport, action);
