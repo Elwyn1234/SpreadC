@@ -69,7 +69,7 @@ enum NORMAL_MODE_ACTION {
   SELECTED_CELL_END,
   VIEWPORT_ROW_UP,
   VIEWPORT_ROW_DOWN,
-  /*VIEWPORT_COLUMN_LEFT,*/
+  VIEWPORT_COLUMN_LEFT,
   VIEWPORT_PAGE_UP,
   VIEWPORT_PAGE_DOWN,
   VIEWPORT_HALF_PAGE_UP,
@@ -493,10 +493,10 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       viewport->anchorRow ++;
       break;
     }
-    /*case VIEWPORT_COLUMN_LEFT: {*/
-    /*  viewport->anchorColumn --;*/
-    /*  break;*/
-    /*}*/
+    case VIEWPORT_COLUMN_LEFT: {
+      viewport->anchorColumn --;
+      break;
+    }
     case VIEWPORT_PAGE_UP: {
       PangoLayout *layout = initialisePangoLayout(program);
       int textHeightPixels = calculateTextHeightPixels(layout);
@@ -699,7 +699,7 @@ void render(Program program, Sheet sheet, Viewport *viewport) {
   printf("[DEBUG] selectedRow: %d\n", sheet.selectedCell / sheet.columnCount);
   printf("[DEBUG] viewport->anchorRow: %d\n", viewport->anchorRow);
   yoffset -= 1 * viewport->anchorRow * cellHeightPixels;
-  /*xoffset -= 1 * viewport->anchorCell % sheet.columnCount * cellWidthPixels;*/
+  xoffset -= 1 * viewport->anchorColumn * cellWidthPixels;
   /*int xoffset = clamp((winAttribs.width - sheetWidth) / 2 - sheet.horizontalPadding, rowNumberColumnWidth, INT_MAX);*/
   /*int yoffset = clamp((winAttribs.height - sheetHeight) / 2 - sheet.verticalPadding, columnNumberRowHeight, INT_MAX);*/
   /*yoffset -= viewport->anchorCell / sheet.columnCount * cellHeightPixels;*/
@@ -1157,25 +1157,25 @@ int main() {
                   normalModeAction(&sheet, &viewport, action);
                   break;
                 }
-                /*case 'b': {*/
-                /*  action.action = VIEWPORT_COLUMN_LEFT;*/
-                /*  normalModeAction(&sheet, &viewport, action);*/
-                /*  break;*/
-                /*}*/
+                case 'b': {
+                  action.action = VIEWPORT_COLUMN_LEFT;
+                  normalModeAction(&sheet, &viewport, action);
+                  break;
+                }
                 case 'y': {
                   /*action.action = FIND_CELL;*/
                   /*normalModeAction(&sheet, &viewport, action);*/
-                  /*break;*/
+                  break;
                 }
                 case 'e': {
                   /*action.action = FIND_CELL;*/
                   /*normalModeAction(&sheet, &viewport, action);*/
-                  /*break;*/
+                  break;
                 }
                 case 'f': {
                   /*action.action = FIND_CELL;*/
                   /*normalModeAction(&sheet, &viewport, action);*/
-                  /*break;*/
+                  break;
                 }
                 case 'i': {
                   action.action = INSERT_BEGIN;
@@ -1279,7 +1279,6 @@ int main() {
 // TODO: 
 // - fix: VIEWPORT_ROW_DOWN does not clamp selected cell
 // - fix: VIEWPORT_ROW_UP does not clamp selected cell
-// - Add VIEWPORT_COLUMN_LEFT('b')
 // - Add VIEWPORT_COLUMN_RIGHT('e')
 // - g<motion>
 // - gg
@@ -1295,6 +1294,7 @@ int main() {
 // - '.' doesnt work for certain input operations, i think my string handling is broken
 //
 // Done:
+// - Add VIEWPORT_COLUMN_LEFT('b')
 // - $
 // - 0
 // - l - bug fix - when at the furthest right column, do not change the selectedCell
