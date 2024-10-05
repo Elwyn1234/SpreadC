@@ -62,7 +62,8 @@ enum NORMAL_MODE_ACTION {
   COLUMN_RIGHT,
   ROW_UP,
   ROW_DOWN,
-  CENTRE_SELECTED_CELL,
+  SELECTED_CELL_CENTRE,
+  SELECTED_CELL_BOTTOM,
   VIEWPORT_ROW_UP,
   VIEWPORT_ROW_DOWN,
   VIEWPORT_PAGE_UP,
@@ -438,7 +439,7 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       sheet->selectedCell += 1;
       break;
     }
-    case CENTRE_SELECTED_CELL: {
+    case SELECTED_CELL_CENTRE: {
       PangoLayout *layout = initialisePangoLayout(program);
       int textHeightPixels = calculateTextHeightPixels(layout);
       int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);
@@ -447,6 +448,19 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
 
       sheet->selectedCell = maxRowsOnScreen / 2 * sheet->columnCount + sheet->selectedCell % sheet->columnCount;
+      break;
+    }
+    case SELECTED_CELL_BOTTOM: {
+      PangoLayout *layout = initialisePangoLayout(program);
+      int textHeightPixels = calculateTextHeightPixels(layout);
+      int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);
+      XWindowAttributes winAttribs = {0};
+      XGetWindowAttributes(program.display, program.window, &winAttribs);
+      int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
+
+      int rowShift = maxRowsOnScreen * sheet->columnCount - sheet->columnCount;
+      int columnShift = sheet->selectedCell % sheet->columnCount;
+      sheet->selectedCell = viewport->anchorCell + rowShift + columnShift;
       break;
     }
     case VIEWPORT_ROW_UP: {
@@ -1087,7 +1101,12 @@ int main() {
                   break;
                 }
                 case 'M': {
-                  action.action = CENTRE_SELECTED_CELL;
+                  action.action = SELECTED_CELL_CENTRE;
+                  normalModeAction(&sheet, &viewport, action);
+                  break;
+                }
+                case 'L': {
+                  action.action = SELECTED_CELL_BOTTOM;
                   normalModeAction(&sheet, &viewport, action);
                   break;
                 }
@@ -1207,11 +1226,12 @@ int main() {
 
 // TODO: 
 // - l - bug fix - when at the furthest right column, do not change the selectedCell
-// - CTRL-l
-// - CTRL-h
-// - g<count>
+// - H
+// - g<motion>
 // - gg
 // - G
+// - d<motion>
+// - dd
 // - clamp the viewport before rendering
 // - ignore function keys
 // - make the renderer render things relative to a point so that a cells text, extents, etc are all 'stuck' together
@@ -1221,6 +1241,7 @@ int main() {
 // - '.' doesnt work for certain input operations, i think my string handling is broken
 //
 // Done:
+// - L
 // - M
 // - VIEWPORT_HALF_PAGE_UP ('CTRL-u')
 // - VIEWPORT_HALF_PAGE_DOWN ('CTRL-d')
@@ -1254,3 +1275,12 @@ int main() {
 // - Unsupported
 //   - Is Euro sign support (i.e. shift-alt-4 or whatever it is)
 //
+// NOTES - ACTIONS:
+// - an interaction with the spreadsheet is a composition of <count><action><motion>
+//   - In cases where the action can either act on rows or columns, the user can specify this using the <count> component.
+//     - a <count> of 18r would act on 19 rows (the current row plus 18 rows above or below)
+//     - 18c would similarly act on the columns
+//     - full example 18rdj - i.e. delete 19 rows from the selected row, downwards
+//       - 18r is the count
+//       - d is the action
+//       - j is the motion
