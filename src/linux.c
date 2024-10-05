@@ -63,6 +63,7 @@ enum NORMAL_MODE_ACTION {
   ROW_UP,
   ROW_DOWN,
   SELECTED_CELL_CENTRE,
+  SELECTED_CELL_TOP,
   SELECTED_CELL_BOTTOM,
   VIEWPORT_ROW_UP,
   VIEWPORT_ROW_DOWN,
@@ -448,6 +449,11 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
 
       sheet->selectedCell = viewport->anchorCell + maxRowsOnScreen / 2 * sheet->columnCount + sheet->selectedCell % sheet->columnCount;
+      break;
+    }
+    case SELECTED_CELL_TOP: {
+      int columnShift = sheet->selectedCell % sheet->columnCount;
+      sheet->selectedCell = viewport->anchorCell + columnShift;
       break;
     }
     case SELECTED_CELL_BOTTOM: {
@@ -1105,6 +1111,11 @@ int main() {
                   normalModeAction(&sheet, &viewport, action);
                   break;
                 }
+                case 'H': {
+                  action.action = SELECTED_CELL_TOP;
+                  normalModeAction(&sheet, &viewport, action);
+                  break;
+                }
                 case 'L': {
                   action.action = SELECTED_CELL_BOTTOM;
                   normalModeAction(&sheet, &viewport, action);
@@ -1225,8 +1236,6 @@ int main() {
 
 
 // TODO: 
-// - l - bug fix - when at the furthest right column, do not change the selectedCell
-// - H
 // - g<motion>
 // - gg
 // - G
@@ -1241,6 +1250,8 @@ int main() {
 // - '.' doesnt work for certain input operations, i think my string handling is broken
 //
 // Done:
+// - l - bug fix - when at the furthest right column, do not change the selectedCell
+// - H
 // - L
 // - M
 // - VIEWPORT_HALF_PAGE_UP ('CTRL-u')
