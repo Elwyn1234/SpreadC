@@ -476,10 +476,14 @@ void sheetCellAppend(Sheet sheet, int cellIndex, char* valueToInsert, int valueT
 void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
   switch (action.action) {
     case COLUMN_LEFT: {
-      sheet->selectedCell -= 1;
+      if (sheet->selectedCell % sheet->columnCount > 0)
+        sheet->selectedCell -= 1;
       break;
     }
     case ROW_DOWN: {
+      if (sheet->selectedCell / sheet->columnCount >= sheet->rowCount - 1)
+        break;
+
       PangoLayout *layout = initialisePangoLayout(program);
       int textHeightPixels = calculateTextHeightPixels(layout);
       int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);
@@ -497,6 +501,8 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       break;
     }
     case ROW_UP: {
+      if (sheet->selectedCell / sheet->columnCount == 0)
+        break;
       sheet->selectedCell -= sheet->columnCount;
       int selectedRow = sheet->selectedCell / sheet->columnCount;
       if (viewport->anchorRow > selectedRow) {
@@ -505,7 +511,8 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       break;
     }
     case COLUMN_RIGHT: {
-      sheet->selectedCell += 1;
+      if (sheet->selectedCell % sheet->columnCount < sheet->columnCount - 1)
+        sheet->selectedCell += 1;
       break;
     }
     case SELECTED_CELL_CENTRE: {
@@ -1534,7 +1541,9 @@ int main() {
 
 
 // TODO: 
+// - fix: M is relative to the screen, not the sheet
 // - need a nice way to simplify the complexity of implementing compositions (<count><action><motion>)
+//   - improve <count>g implementation
 // - fix: VIEWPORT_ROW_DOWN does not clamp selected cell
 // - fix: VIEWPORT_ROW_UP does not clamp selected cell
 // - fix: VIEWPORT_COLUMN_LEFT does not clamp selected cell
@@ -1552,6 +1561,7 @@ int main() {
 // - '.' doesnt work for certain input operations, i think my string handling is broken
 //
 // Done:
+// - <count>g
 // - gg
 // - Add VIEWPORT_COLUMN_RIGHT_HALF_PAGE('E')
 // - Add VIEWPORT_COLUMN_LEFT_HALF_PAGE('B')
