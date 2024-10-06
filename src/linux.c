@@ -835,16 +835,14 @@ void render(Program program, Sheet sheet, Viewport *viewport) {
     int rowsOnScreen = maxRowsOnScreen > sheet.rowCount ? sheet.rowCount : maxRowsOnScreen;
     rowNumberColumnWidth = intToString(rowsOnScreen).length * textWidthPixels + 2 * sheet.horizontalPadding;
   }
-  int xoffset = 0;
-  int yoffset = 0;
+  int xoffset = clamp((winAttribs.width - sheetWidth) / 2 - sheet.horizontalPadding, rowNumberColumnWidth, INT_MAX);
+  int yoffset = clamp((winAttribs.height - sheetHeight) / 2 - sheet.verticalPadding, columnNumberRowHeight, INT_MAX);
+  yoffset -= 1 * viewport->anchorRow * cellHeightPixels;
+  xoffset -= 1 * viewport->anchorColumn * cellWidthPixels;
+
   printf("[DEBUG] sheet.selectedCell: %d\n", sheet.selectedCell);
   printf("[DEBUG] selectedRow: %d\n", sheet.selectedCell / sheet.columnCount);
   printf("[DEBUG] viewport->anchorRow: %d\n", viewport->anchorRow);
-  yoffset -= 1 * viewport->anchorRow * cellHeightPixels;
-  xoffset -= 1 * viewport->anchorColumn * cellWidthPixels;
-  /*int xoffset = clamp((winAttribs.width - sheetWidth) / 2 - sheet.horizontalPadding, rowNumberColumnWidth, INT_MAX);*/
-  /*int yoffset = clamp((winAttribs.height - sheetHeight) / 2 - sheet.verticalPadding, columnNumberRowHeight, INT_MAX);*/
-  /*yoffset -= viewport->anchorCell / sheet.columnCount * cellHeightPixels;*/
 
 
 
