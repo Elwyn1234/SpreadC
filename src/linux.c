@@ -123,6 +123,36 @@ struct Program {
 //                   Util                   //
 //******************************************//
 
+void assert_lt_int(int value, int expected, char *assertionMessage) {
+  if (value >= expected) {
+    printf("[ASSERT] %s\n", assertionMessage);
+    exit(1);
+  }
+}
+
+void assert_gt_int(int value, int expected, char *assertionMessage) {
+  if (value <= expected) {
+    printf("[ASSERT] %s\n", assertionMessage);
+    exit(1);
+  }
+}
+
+void assert_equal_int(int value, int expected, char *assertionMessage) {
+  if (value != expected) {
+    printf("[ASSERT] %s\n", assertionMessage);
+    exit(1);
+  }
+}
+
+void assert_zeroed(char *value, int length, char *assertionMessage) {
+  for (int i = 0; i < length; i++) {
+    if (value[i] != 0) {
+      printf("[ASSERT] %s\n", assertionMessage);
+      exit(1);
+    }
+  }
+}
+
 void assert(char value, char *assertionMessage) {
   if (! value) {
     printf("[ASSERT] %s\n", assertionMessage);
@@ -657,9 +687,19 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
 
       switch (action.motion) {
-        case SHEET_TOP:
+        case SHEET_TOP: {
           sheet->selectedCell = sheet->selectedCell % sheet->columnCount;
           viewport->anchorRow = clampToValue(viewport->anchorRow, -maxRowsOnScreen, 0, 0);
+          break;
+        }
+      }
+      if (action.motion == 0) {
+        assert_gt_int(action.count, 0, "[ckm+lVnh] action.count is not gt 0");
+        int oneBasedRowIndex = action.count - 1;
+        int columnShift = sheet->selectedCell % sheet->columnCount;
+        sheet->selectedCell = oneBasedRowIndex * sheet->columnCount + columnShift;
+        viewport->anchorRow = clampToValue(viewport->anchorRow, oneBasedRowIndex - maxRowsOnScreen + 1, oneBasedRowIndex, oneBasedRowIndex - maxRowsOnScreen / 2);
+        viewport->anchorRow = clamp(viewport->anchorRow, 0, INT_MAX);
       }
 
       break;
@@ -935,6 +975,22 @@ void render(Program program, Sheet sheet, Viewport *viewport) {
   // XFlush(program.display);
 }
 
+
+////////////////////////////////////////////////////////////////////////
+// KeyPress functions
+////////////////////////////////////////////////////////////////////////
+char validateUserInput() {
+// bad user input - abort and reset
+if (program.currentAction.action != 0) {
+  Action action = {0};
+  program.currentAction = action;
+  return FALSE;
+}
+assert_equal_int(program.currentAction.motion, 0, "[erfDJ05n] program.currentAction.motion is not 0");
+assert_zeroed((void*) &program.currentAction.text, sizeof(program.currentAction.text), "[P5f9O2Mu] program.currentAction.text is not zeroed");
+
+return TRUE;
+}
 
 
 //******************************************//
@@ -1227,6 +1283,61 @@ int main() {
             }
             else {
               switch (translatedChar) {
+                case '1': {
+                  if (! validateUserInput()) { break; }
+                  action.count = 1;
+                  program.currentAction = action;
+                  break;
+                }
+                case '2': {
+                  if (! validateUserInput()) { break; }
+                  action.count = 2;
+                  program.currentAction = action;
+                  printf("[REMOVE ME] program.currentAction.count: %d\n", program.currentAction.count);
+                  break;
+                }
+                case '3': {
+                  if (! validateUserInput()) { break; }
+                  action.count = 3;
+                  program.currentAction = action;
+                  break;
+                }
+                case '4': {
+                  if (! validateUserInput()) { break; }
+                  action.count = 4;
+                  program.currentAction = action;
+                  break;
+                }
+                case '5': {
+                  if (! validateUserInput()) { break; }
+                  action.count = 5;
+                  program.currentAction = action;
+                  break;
+                }
+                case '6': {
+                  if (! validateUserInput()) { break; }
+                  action.count = 6;
+                  program.currentAction = action;
+                  break;
+                }
+                case '7': {
+                  if (! validateUserInput()) { break; }
+                  action.count = 7;
+                  program.currentAction = action;
+                  break;
+                }
+                case '8': {
+                  if (! validateUserInput()) { break; }
+                  action.count = 8;
+                  program.currentAction = action;
+                  break;
+                }
+                case '9': {
+                  if (! validateUserInput()) { break; }
+                  action.count = 9;
+                  program.currentAction = action;
+                  break;
+                }
                 case 'h': {
                   action.action = COLUMN_LEFT;
                   normalModeAction(&sheet, &viewport, action);
@@ -1294,6 +1405,7 @@ int main() {
                 }
                 case 'g': {
                   if (program.currentAction.action != 0) {
+                    // TODO: can program.currentAction.action be something other than VIEWPORT_GO_TO here and is that bad
                     program.currentAction.motion = SHEET_TOP;
                     normalModeAction(&sheet, &viewport, program.currentAction);
                     Action action = {0};
@@ -1301,7 +1413,7 @@ int main() {
                   }
                   else if (program.currentAction.count != 0) {
                     program.currentAction.action = VIEWPORT_GO_TO;
-                    normalModeAction(&sheet, &viewport, action);
+                    normalModeAction(&sheet, &viewport, program.currentAction);
                     Action action = {0};
                     program.currentAction = action;
                   }
@@ -1422,6 +1534,7 @@ int main() {
 
 
 // TODO: 
+// - need a nice way to simplify the complexity of implementing compositions (<count><action><motion>)
 // - fix: VIEWPORT_ROW_DOWN does not clamp selected cell
 // - fix: VIEWPORT_ROW_UP does not clamp selected cell
 // - fix: VIEWPORT_COLUMN_LEFT does not clamp selected cell
