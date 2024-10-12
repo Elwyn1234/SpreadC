@@ -1266,53 +1266,35 @@ int main() {
         else {
           {
             Action action = {0};
+            Action emptyAction = {0};
+            program.normalModeState = 0;
+            switch (program.normalModeState) {
+              case MOTION: {
+                MOTION motion;
+                int err = motionMap(translatedChar, &motion);
+                if (err == 0) {
+                  program.currentAction.motion = motion;
+                }
+                else if (err == 1) {
+                  program.currentAction = emptyAction;
+                }
+              }
+              case ACTION: {
+                NORMAL_MODE_ACTION action;
+                int err = actionMap(translatedChar, &action);
+                if (err == 0) {
+                  program.currentAction.action = action;
+                }
+                else if (err == 1) {
+                  program.currentAction = emptyAction;
+                }
+              }
+            }
+
+
+
             if (event.xkey.state & ControlMask) {
               switch (keySymPressed) {
-                case XK_e: {
-                  action.action = VIEWPORT_ROW_DOWN;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case XK_y: {
-                  action.action = VIEWPORT_ROW_UP;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case XK_j: {
-                  action.action = VIEWPORT_ROW_DOWN;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case XK_k: {
-                  action.action = VIEWPORT_ROW_UP;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case XK_l: { // TODO: CLASHES WITH vim's action - REDRAW_SCREEN
-                  action.action = VIEWPORT_COLUMN_RIGHT;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case XK_h: {
-                  action.action = VIEWPORT_COLUMN_LEFT;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case XK_b: {
-                  action.action = VIEWPORT_PAGE_UP;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case XK_f: {
-                  action.action = VIEWPORT_PAGE_DOWN;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case XK_u: {
-                  action.action = VIEWPORT_HALF_PAGE_UP;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
                 case XK_d: {
                   action.action = VIEWPORT_HALF_PAGE_DOWN;
                   normalModeAction(&sheet, &viewport, action);
@@ -1322,187 +1304,6 @@ int main() {
             }
             else {
               switch (translatedChar) {
-                case '1': {
-                  if (! validateUserInput()) { break; }
-                  action.count = 1;
-                  program.currentAction = action;
-                  break;
-                }
-                case '2': {
-                  if (! validateUserInput()) { break; }
-                  action.count = 2;
-                  program.currentAction = action;
-                  printf("[REMOVE ME] program.currentAction.count: %d\n", program.currentAction.count);
-                  break;
-                }
-                case '3': {
-                  if (! validateUserInput()) { break; }
-                  action.count = 3;
-                  program.currentAction = action;
-                  break;
-                }
-                case '4': {
-                  if (! validateUserInput()) { break; }
-                  action.count = 4;
-                  program.currentAction = action;
-                  break;
-                }
-                case '5': {
-                  if (! validateUserInput()) { break; }
-                  action.count = 5;
-                  program.currentAction = action;
-                  break;
-                }
-                case '6': {
-                  if (! validateUserInput()) { break; }
-                  action.count = 6;
-                  program.currentAction = action;
-                  break;
-                }
-                case '7': {
-                  if (! validateUserInput()) { break; }
-                  action.count = 7;
-                  program.currentAction = action;
-                  break;
-                }
-                case '8': {
-                  if (! validateUserInput()) { break; }
-                  action.count = 8;
-                  program.currentAction = action;
-                  break;
-                }
-                case '9': {
-                  if (! validateUserInput()) { break; }
-                  action.count = 9;
-                  program.currentAction = action;
-                  break;
-                }
-                case 'h': {
-                  action.action = COLUMN_LEFT;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case 'j': {
-                  action.action = ROW_DOWN;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case 'k': {
-                  action.action = ROW_UP;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case 'l': {
-                  action.action = COLUMN_RIGHT;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case 'M': {
-                  action.action = SELECTED_CELL_CENTRE;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case 'H': {
-                  action.action = SELECTED_CELL_TOP;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case 'L': {
-                  action.action = SELECTED_CELL_BOTTOM;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case '$': {
-                  action.action = SELECTED_CELL_END;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case '0': {
-                  action.action = SELECTED_CELL_BEGINNING;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case 'e': {
-                  action.action = VIEWPORT_COLUMN_RIGHT;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case 'b': {
-                  action.action = VIEWPORT_COLUMN_LEFT;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case 'B': {
-                  action.action = VIEWPORT_COLUMN_LEFT_HALF_PAGE;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case 'E': {
-                  action.action = VIEWPORT_COLUMN_RIGHT_HALF_PAGE;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-                case 'g': {
-                  if (program.currentAction.action != 0) {
-                    // TODO: can program.currentAction.action be something other than VIEWPORT_GO_TO here and is that bad
-                    program.currentAction.motion = SHEET_TOP;
-                    normalModeAction(&sheet, &viewport, program.currentAction);
-                    Action action = {0};
-                    program.currentAction = action;
-                  }
-                  else if (program.currentAction.count != 0) {
-                    program.currentAction.action = VIEWPORT_GO_TO;
-                    normalModeAction(&sheet, &viewport, program.currentAction);
-                    Action action = {0};
-                    program.currentAction = action;
-                  }
-                  else {
-                    Action action = {0};
-                    program.currentAction = action;
-                    program.currentAction.action = VIEWPORT_GO_TO;
-                  }
-                  break;
-                }
-                case 'y': {
-                  /*action.action = FIND_CELL;*/
-                  /*normalModeAction(&sheet, &viewport, action);*/
-                  break;
-                }
-                case 'f': {
-                  /*action.action = FIND_CELL;*/
-                  /*normalModeAction(&sheet, &viewport, action);*/
-                  break;
-                }
-                case 'i': {
-                  action.action = INSERT_BEGIN;
-                  normalModeAction(&sheet, &viewport, action);
-                  program.lastAction = action;
-                  program.lastAction.action = INSERT_TEXT;
-                  break;
-                }
-                /* case 'I': { */
-                /*   sheet.insertMode = TRUE; */
-                /*   // INSERT MODE AT THE END OF THE STRING */
-                /*   break; */
-                /* } */
-                case 'a': {
-                  action.action = APPEND_COLUMN;
-                  normalModeAction(&sheet, &viewport, action);
-                  program.lastAction = action;
-                  break;
-                }
-                case 'A': {
-                  action.action = INSERT_COLUMN;
-                  normalModeAction(&sheet, &viewport, action);
-                  program.lastAction = action;
-                  break;
-                }
-                case 'o': {
-                  action.action = APPEND_ROW;
-                  normalModeAction(&sheet, &viewport, action);
-                  program.lastAction = action;
-                  break;
-                }
                 case 'd': {
                   switch (program.normalModeState) {
                     case COUNT_ACTION: {
@@ -1544,30 +1345,6 @@ int main() {
                   }
                   break;
                 }
-                case '.': { // TODO
-                  normalModeAction(&sheet, &viewport, program.lastAction);
-                  break;
-                }
-                /* case '$': { // TODO */
-                /*   sheetAppendRow(&sheet, sheet->selectedCell); */
-                /*   break; */
-                /* } */
-                /* case 'e': { // TODO */
-                /*   sheetAppendRow(&sheet, sheet->selectedCell); */
-                /*   break; */
-                /* } */
-                /* case 'Input.CTRL_E': { // TODO */
-                /*   sheetAppendRow(&sheet, sheet->selectedCell); */
-                /*   break; */
-                /* } */
-                /* case 'y???': { // TODO */
-                /*   sheetAppendRow(&sheet, sheet->selectedCell); */
-                /*   break; */
-                /* } */
-                /* case 'Input.CTRL_Y': { // TODO */
-                /*   sheetAppendRow(&sheet, sheet->selectedCell); */
-                /*   break; */
-                /* } */
               }
             }
           }
