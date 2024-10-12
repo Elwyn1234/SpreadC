@@ -33,6 +33,7 @@ typedef struct Color Color;
 typedef char Boolean;
 typedef struct String String; 
 typedef enum NORMAL_MODE_ACTION NORMAL_MODE_ACTION;
+typedef enum NORMAL_MODE_STATE NORMAL_MODE_STATE;
 typedef enum MOTION MOTION;
 typedef struct Action Action;
 typedef struct Program Program;
@@ -59,6 +60,14 @@ struct Color {
 struct String {
   char *value;
   int length;
+};
+
+enum NORMAL_MODE_STATE {
+  COUNT,
+  COUNT_ACTION,
+  ACTION,
+  COUNT_ACTION_MOTION,
+  ACTION_MOTION,
 };
 
 enum NORMAL_MODE_ACTION {
@@ -88,10 +97,17 @@ enum NORMAL_MODE_ACTION {
   INSERT_COLUMN,
   APPEND_ROW,
   INSERT_ROW,
+  DELETE_ROW,
 };
 
 enum MOTION {
-  SHEET_TOP = 1,
+  MTN_SHEET_TOP = 1,
+  MTN_ROW,
+  MTN_COLUMN,
+  MTN_ROW_UP,
+  MTN_ROW_DOWN,
+  MTN_COLUMN_LEFT,
+  MTN_COLUMN_RIGHT,
 };
 
 struct Action {
@@ -113,6 +129,7 @@ struct Program {
   XColor foreground;
   Color text;
 
+  NORMAL_MODE_STATE normalModeState;
   Action lastAction;
   Action currentAction;
 };
@@ -290,24 +307,24 @@ void dynamicStringArrayInsert(DynamicStringArray *array, String element, int ind
     }
     free(arrayData);
   }
-  for (int i = newLength; i > index; i--) {
+  for (int i = newLength - 1; i > index; i--) {
     array->data[i] = array->data[i-1];
   }
   array->data[index] = element;
   array->length = newLength;
 }
-void dynamicStringArrayRemove(DynamicStringArray *array, int element, int index) {
+void dynamicStringArrayRemove(DynamicStringArray *array, int index) {
   int oldLength = array->length;
   int newLength = array->length - 1;
+  for (int i = index; i < newLength; i++) {
+    array->data[i] = array->data[i+1];
+  }
   if (newLength < array->capacity/4) {
     String *arrayData = array->data;
     array->capacity /= 2;
     array->data = malloc(sizeof(String) * array->capacity);
     for (int i = 0; i < oldLength; i++) {
       array->data[i] = arrayData[i];
-    }
-    for (int i = index; i < newLength; i++) {
-      array->data[i] = array->data[i+1];
     }
   }
   array->length = newLength;
@@ -350,18 +367,18 @@ void dynamicIntArrayInsert(DynamicIntArray *array, int element, int index) {
   array->data[index] = element;
   array->length = newLength;
 }
-void dynamicIntArrayRemove(DynamicIntArray *array, int element, int index) {
+void dynamicIntArrayRemove(DynamicIntArray *array, int index) {
   int oldLength = array->length;
   int newLength = array->length - 1;
+  for (int i = index; i < newLength; i++) {
+    array->data[i] = array->data[i+1];
+  }
   if (newLength < array->capacity/4) {
     int *arrayData = array->data;
     array->capacity /= 2;
     array->data = malloc(sizeof(int) * array->capacity);
     for (int i = 0; i < oldLength; i++) {
       array->data[i] = arrayData[i];
-    }
-    for (int i = index; i < newLength; i++) {
-      array->data[i] = array->data[i+1];
     }
   }
   array->length = newLength;
@@ -422,6 +439,18 @@ Sheet newSheet(int rowCount, int columnCount) {
   sheet.columnCount = columnCount;
   sheet.rowCount = rowCount;
   return sheet;
+}
+
+void sheetDeleteRow(Sheet *sheet, int cellIndex) { // TODO: test
+  int row = cellIndex / sheet->columnCount;
+  int startCellOfRow = row * sheet->columnCount;
+  int startCellOfNextRow = startCellOfRow + sheet->columnCount;
+  dynamicIntArrayRemove(&sheet->cellHeights, row);
+  for (int i = startCellOfNextRow - 1; i >= startCellOfRow; i--) {
+    printf("[REMOVE ME] i: %d\n", i);
+    dynamicStringArrayRemove(&sheet->strings, i);
+  }
+  sheet->rowCount --;
 }
 
 // TODO: Make this function like sheetInsertRow and rename both this and sheetAppendColumn
@@ -744,6 +773,11 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
     }
     case INSERT_ROW: {
       sheetAppendRow(sheet, sheet->selectedCell);
+      break;
+    }
+    case DELETE_ROW: {
+      if (sheet->rowCount > 0)
+        sheetDeleteRow(sheet, sheet->selectedCell);
       break;
     }
     /* case '$': { // TODO */
@@ -1469,10 +1503,45 @@ int main() {
                   program.lastAction = action;
                   break;
                 }
-                case 'O': {
-                  action.action = INSERT_ROW;
-                  normalModeAction(&sheet, &viewport, action);
-                  program.lastAction = action;
+                case 'd': {
+                  switch (program.normalModeState) {
+                    case COUNT_ACTION: {
+                      program.currentAction.action = DELETE_ROW;
+                      break;
+                    }
+                    case ACTION: {
+                      program.currentAction.action = DELETE_ROW;
+                      break;
+                    }
+                    case COUNT_ACTION_MOTION: {
+                      if (program.currentAction.action == DELETE_ROW) {
+                        program.currentAction.motion = MTN_ROW;
+                        for (int i = 0; i < program.currentAction.count; i++) {
+                          normalModeAction(&sheet, &viewport, action);
+                        }
+                        program.lastAction = action;
+                      } else {
+                        Action action = {0};
+                        program.currentAction = action;
+                      }
+                      break;
+                    }
+                    case ACTION_MOTION: {
+                      if (program.currentAction.action == DELETE_ROW) {
+                        action.motion = MTN_ROW;
+                        normalModeAction(&sheet, &viewport, action);
+                        program.lastAction = action;
+                      } else {
+                        Action action = {0};
+                        program.currentAction = action;
+                      }
+                      break;
+                    }
+                    default: {
+                      assert(FALSE, "FUCKED");
+                      break;
+                    }
+                  }
                   break;
                 }
                 case '.': { // TODO
@@ -1539,6 +1608,9 @@ int main() {
 
 
 // TODO: 
+// - improve memory manaegent (sheet.strings)
+// - fix: seg fault on too many o actions
+// - fix: crash on too many a actions
 // - fix: M is relative to the screen, not the sheet
 // - need a nice way to simplify the complexity of implementing compositions (<count><action><motion>)
 //   - improve <count>g implementation
