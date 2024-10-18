@@ -32,12 +32,15 @@ typedef struct Sheet Sheet;
 typedef struct Color Color;
 typedef char Boolean;
 typedef struct String String; 
+typedef struct MapNode MapNode; 
+typedef struct Map Map; 
 typedef enum NORMAL_MODE_ACTION NORMAL_MODE_ACTION;
 typedef enum MOTION MOTION;
 typedef struct Action Action;
 typedef struct Program Program;
 typedef struct DynamicStringArray DynamicStringArray;
 typedef struct DynamicIntArray DynamicIntArray;
+typedef struct DynamicArrayMapNode DynamicArrayMapNode;
 
 PangoLayout *initialisePangoLayout(Program program);
 int calculateMaxRowsOnScreen(XWindowAttributes winAttribs, int cellHeightPixels);
@@ -46,6 +49,7 @@ int calculateTextHeightPixels(PangoLayout *layout);
 int calculateTextWidthPixels(PangoLayout *layout);
 int calculateCellHeightPixels(int textHeightPixels, Sheet sheet);
 int calculateCellWidthPixels(int textHeightPixels, Sheet sheet);
+char stringEquals(String a, String b);
 
 Program program;
 
@@ -242,9 +246,131 @@ char keyPressedToChar(char *keyPressed) {
   return keyPressed[0];
 }
 
+
+
+//////////////////////////////////////////////
+// Map
+//////////////////////////////////////////////
+
+struct MapNode {
+  String key;
+  int value;
+};
+
+struct DynamicArrayMapNode {
+  int length;
+  int capacity;
+  MapNode *data;
+};
+
+DynamicArrayMapNode dynamicArrayMapNodeNew(int capacity) {
+  DynamicArrayMapNode array = {0};
+  array.length = 0;
+  array.capacity = capacity;
+  array.data = malloc(sizeof(MapNode) * array.capacity);
+  return array;
+}
+
+void dynamicArrayMapNodeInsert(DynamicArrayMapNode *array, MapNode element, int index) {
+  int oldLength = array->length;
+  int newLength = array->length + 1;
+  if (newLength > array->capacity) {
+    MapNode *arrayData = array->data;
+    array->capacity *= 2;
+    array->data = malloc(sizeof(MapNode) * array->capacity);
+    for (int i = 0; i < oldLength; i++) {
+      array->data[i] = arrayData[i];
+    }
+    free(arrayData);
+  }
+  for (int i = newLength - 1; i > index; i--) {
+    array->data[i] = array->data[i-1];
+  }
+  array->data[index] = element;
+  array->length = newLength;
+}
+
+void dynamicArrayMapNodeRemove(DynamicArrayMapNode *array, int index) {
+  int oldLength = array->length;
+  int newLength = array->length - 1;
+  if (newLength < array->capacity/4) {
+    MapNode *arrayData = array->data;
+    array->capacity /= 2;
+    array->data = malloc(sizeof(MapNode) * array->capacity);
+    for (int i = 0; i < oldLength; i++) {
+      array->data[i] = arrayData[i];
+    }
+  }
+  for (int i = index; i < newLength; i++) {
+    array->data[i] = array->data[i+1];
+  }
+  array->length = newLength;
+}
+
+
+
+struct Map {
+  DynamicArrayMapNode arrayMapNode;
+};
+
+Map mapNew(int capacity) {
+  Map map = {0};
+  map.arrayMapNode = dynamicArrayMapNodeNew(capacity);
+  return map;
+}
+
+int mapLookup(Map *map, String key) {
+  for(int i = 0; i < map->arrayMapNode.length; i++) {
+    if (stringEquals(key, map->arrayMapNode.data[i].key)) {
+      return map->arrayMapNode.data[i].value;
+    }
+  }
+  return INT_MAX;
+}
+
+void mapInsert(Map *map, String key, int value) {
+  MapNode node = {0};
+  node.key = key;
+  node.value = value;
+  dynamicArrayMapNodeInsert(&map->arrayMapNode, node, map->arrayMapNode.length);
+}
+
+int mapLookupIndex(Map *map, String key) {
+  for(int i = 0; i < map->arrayMapNode.length; i++) {
+    if (stringEquals(key, map->arrayMapNode.data[i].key)) {
+      return i;
+    }
+  }
+  return INT_MAX;
+}
+
+int mapRemove(Map *map, String key) {
+  int index = mapLookupIndex(map, key);
+  if (index == INT_MAX) {
+    return 1;
+  }
+  dynamicArrayMapNodeRemove(&map->arrayMapNode, index);
+  return 0;
+}
+
 //******************************************//
 //                  String                  //
 //******************************************//
+
+String stringCat(String pre, String post) {
+  String new = {0};
+  new.length = pre.length + post.length;
+  new.value = malloc(sizeof(char) * (pre.length + post.length));
+  for (int i = 0; i < new.length; i++) {
+    if (i < pre.length) {
+      new.value[i] = pre.value[i];
+    } else {
+      int postIndex = i - pre.length;
+      new.value[i] = post.value[postIndex];
+    }
+  }
+  return new;
+}
 
 String stringInsertChar(String s, char c, int i) {
   String newString = {0};
@@ -259,6 +385,29 @@ String stringInsertChar(String s, char c, int i) {
     newString.value[newStringIndex] = s.value[oldStringIndex];
   }
   return newString;
+}
+
+char stringEquals(String a, String b) {
+  if (a.length != b.length) {
+    return FALSE;
+  }
+  String shorter;
+  String longer;
+  if (a.length > b.length) {
+    longer = a;
+    shorter = b;
+  } else {
+    longer = b;
+    shorter = a;
+  }
+
+  for (int i = 0; i < shorter.length; i++) {
+    if (shorter.value[i] != longer.value[i]) {
+      return FALSE;
+    }
+  }
+
+  return TRUE;
 }
 
 //******************************************//
@@ -290,7 +439,7 @@ void dynamicStringArrayInsert(DynamicStringArray *array, String element, int ind
     }
     free(arrayData);
   }
-  for (int i = newLength; i > index; i--) {
+  for (int i = newLength - 1; i > index; i--) {
     array->data[i] = array->data[i-1];
   }
   array->data[index] = element;
@@ -1003,6 +1152,38 @@ return TRUE;
 //******************************************//
 
 int main() {
+  /*Map map = mapNew(1);*/
+  /*for (int i = 0; i < 10000; i++) {*/
+  /*  String post = intToString(i);*/
+  /*  String pre = { "key", 3 };*/
+  /*  String key = stringCat(pre, post);*/
+  /*  mapInsert(&map, key, i);*/
+  /*}*/
+  /*String keyToRemove1 = { "key1122", 7 };*/
+  /*String keyToRemove2 = { "key1124", 7 };*/
+  /*int mapRemoveResult1 = mapRemove(&map, keyToRemove1);*/
+  /*int mapRemoveResult2 = mapRemove(&map, keyToRemove2);*/
+  /*int mapRemoveResult3 = mapRemove(&map, keyToRemove2);*/
+  /*printf("mapRemoveResult1: %d\n", mapRemoveResult1);*/
+  /*printf("mapRemoveResult2: %d\n", mapRemoveResult2);*/
+  /*printf("mapRemoveResult3: %d\n", mapRemoveResult3);*/
+  /*String e1 = { "key1123", 7 };*/
+  /*int value1 = mapLookup(&map, keyToRemove1);*/
+  /*int value2 = mapLookup(&map, e1);*/
+  /*int value3 = mapLookup(&map, keyToRemove2);*/
+  /*printf("value1: %d\n", value1);*/
+  /*printf("value2: %d\n", value2);*/
+  /*printf("value3: %d\n", value3);*/
+
+  /*String e1 = { "key1", 4 };*/
+  /*String e2 = { "key2", 4 };*/
+  /*String e3 = { "key3", 4 };*/
+  /**/
+  /*mapInsert(&map, e1, 1);*/
+  /*mapInsert(&map, e2, 2);*/
+
+
+
   Display* display = XOpenDisplay(NULL);
   int screen_number = XDefaultScreen(display);
   Window root = XRootWindow(display, screen_number);
