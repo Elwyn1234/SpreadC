@@ -494,18 +494,9 @@ char stringEquals(String a, String b) {
   if (a.length != b.length) {
     return FALSE;
   }
-  String shorter;
-  String longer;
-  if (a.length > b.length) {
-    longer = a;
-    shorter = b;
-  } else {
-    longer = b;
-    shorter = a;
-  }
 
-  for (int i = 0; i < shorter.length; i++) {
-    if (shorter.value[i] != longer.value[i]) {
+  for (int i = 0; i < a.length; i++) {
+    if (a.value[i] != b.value[i]) {
       return FALSE;
     }
   }
@@ -552,7 +543,7 @@ Sheet newSheet(int rowCount, int columnCount) {
   int cellCount = columnCount * rowCount;
   sheet.cellWidths = dArrayIntNew(columnCount + 100);
   sheet.cellHeights = dArrayIntNew(rowCount + 1000);
-  sheet.strings = dArrayStringNew(cellCount + 1000);
+  sheet.strings = dArrayStringNew(cellCount + 10);
   for (int i = 0; i < cellCount; i++) {
     String string = {0};
     dArrayStringInsert(&sheet.strings, string, i);
@@ -904,7 +895,10 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
     }
     case APPEND_ROW: {
       sheetAppendRow(sheet, sheet->selectedCell + sheet->columnCount);
-      sheet->selectedCell += sheet->columnCount;
+      Action action = {0};
+      action.action = ROW_DOWN;
+      action.count = 1;
+      normalModeAction(sheet, viewport, action);
       break;
     }
     case INSERT_ROW: {

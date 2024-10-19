@@ -44,8 +44,12 @@ cat >> src/dArray.h << HEREDOC
 HEREDOC
 
 echo Compilation timings
-time clang src/*.c -o build/a.out `pkg-config --cflags --libs pango x11 pangocairo`
+time clang -g -O0 src/*.c -o build/a.out `pkg-config --cflags --libs pango x11 pangocairo`
 
 echo -e "\nStarting Application...\n"
-./build/a.out
+if [[ "$1" == d ]]; then
+  gdb ./build/a.out
+else
+  ./build/a.out
+fi
 
