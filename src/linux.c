@@ -1,3 +1,6 @@
+#include "types.h"
+#include "dArray.h"
+
 #include "cairo.h"
 #include "pango/pango-font.h"
 #include "pango/pango-glyph.h"
@@ -6,6 +9,7 @@
 #include <X11/X.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <time.h>
 #include <xcb/xcb.h>
 #include <xcb/xproto.h>
 #include <unistd.h>
@@ -39,11 +43,10 @@ typedef enum NORMAL_MODE_STATE NORMAL_MODE_STATE;
 typedef enum MOTION MOTION;
 typedef struct Action Action;
 typedef struct Program Program;
-typedef struct DynamicStringArray DynamicStringArray;
-typedef struct DynamicIntArray DynamicIntArray;
 typedef struct DynamicArrayMapNode DynamicArrayMapNode;
 
 PangoLayout *initialisePangoLayout(Program program);
+int clamp(int number, int lower, int higher);
 int calculateMaxRowsOnScreen(XWindowAttributes winAttribs, int cellHeightPixels);
 int calculateMaxColumnsOnScreen(XWindowAttributes winAttribs, int cellHeightPixels);
 int calculateTextHeightPixels(PangoLayout *layout);
@@ -51,6 +54,9 @@ int calculateTextWidthPixels(PangoLayout *layout);
 int calculateCellHeightPixels(int textHeightPixels, Sheet sheet);
 int calculateCellWidthPixels(int textHeightPixels, Sheet sheet);
 char stringEquals(String a, String b);
+char *stringToNativeTerminated(String str);
+String stringInsertChar(String s, char c, int i);
+String stringCat(String pre, String post);
 
 Program program;
 
@@ -61,17 +67,13 @@ struct Color {
   double alpha;
 };
 
-struct String {
-  char *value;
-  int length;
-};
-
 enum NORMAL_MODE_STATE {
-  COUNT,
-  COUNT_ACTION,
-  ACTION,
-  COUNT_ACTION_MOTION,
-  ACTION_MOTION,
+  NMS_MOTION = 1,
+  NMS_COUNT,
+  NMS_ACTION,
+  /*COUNT_ACTION,*/
+  /*COUNT_ACTION_MOTION,*/
+  /*ACTION_MOTION,*/
 };
 
 enum NORMAL_MODE_ACTION {
@@ -192,7 +194,33 @@ char keyToUpper(char key) {
   return key; // TODO
 }
 
-String intToString(int number) {
+String stringLeftPad(String s, char c, int count) {
+  String new = {0};
+  new.length = s.length + count;
+  new.value = malloc(sizeof(char) * (new.length));
+  for (int i = 0; i < count; i++) {
+    new.value[i] = c;
+  }
+  for (int i = count; i < new.length; i++) {
+    new.value[i] = s.value[i - count];
+  }
+  return new;
+}
+
+String stringLeftAlign(String s, char c, int size) {
+  if (s.length >= size) {
+    return s;
+  }
+  int padAmount = size - s.length;
+  return stringLeftPad(s, c, padAmount);
+}
+
+String stringTruncate(String s, int length) {
+  s.length = length;
+  return s;
+}
+
+String stringFromLong(long number) {
   String string = {0};
   string.length = 1;
   int a = number;
@@ -261,6 +289,25 @@ Boolean stringsEqual(char *str, int strLength, char *otherStr) {
 char keyPressedToChar(char *keyPressed) {
   if (stringsEqual("period", 6, keyPressed)) return '.';
   return keyPressed[0];
+}
+
+char *tsFormat(struct timespec tsPre, struct timespec tsPost) {
+  time_t sTime = tsPost.tv_sec - tsPre.tv_sec;
+  time_t nsTime = sTime == 0 ? (tsPost.tv_nsec - tsPre.tv_nsec) : tsPost.tv_nsec;
+  String sString = stringFromLong(sTime);
+  String nsString = stringFromLong(nsTime);
+  nsString = stringLeftAlign(nsString, '0', 9);
+  String msString = stringTruncate(nsString, 3);
+
+  String x = { "s.", 2 };
+  String y = { "ms", 2 };
+  String formatted = stringCat(sString, x);
+  formatted = stringCat(formatted, msString);
+  formatted = stringCat(formatted, y);
+  
+  char *formattedNative = stringToNativeTerminated(formatted);
+
+  return formattedNative;
 }
 
 
@@ -345,6 +392,15 @@ int mapLookup(Map *map, String key) {
   return INT_MAX;
 }
 
+int mapHasKey(Map *map, String key) {
+  int result = mapLookup(map, key);
+  if (result == INT_MAX) {
+    return FALSE;
+  } else {
+    return TRUE;
+  }
+}
+
 void mapInsert(Map *map, String key, int value) {
   MapNode node = {0};
   node.key = key;
@@ -389,6 +445,36 @@ String stringCat(String pre, String post) {
   return new;
 }
 
+char *stringToNativeTerminated(String str) {
+  char *native = malloc(sizeof(char) * (str.length + 1));
+  for (int i = 0; i < str.length; i++) {
+    native[i] = str.value[i];
+  }
+  native[str.length] = '\0';
+  return native;
+}
+
+String stringFromNative(char *native, int length) {
+  String str = {0};
+  str.length = length;
+  str.value = calloc(sizeof(char), length);
+  for (int i = 0; i < length; i++) {
+    str.value[i] = native[i];
+  }
+  return str;
+}
+
+String stringFromNativeTerminated(char *native) {
+  int i = 0;
+  while (TRUE) {
+    if (native[i] == '\0') {
+      break;
+    }
+  }
+  int length = i;
+  return stringFromNative(native, length);
+}
+
 String stringInsertChar(String s, char c, int i) {
   String newString = {0};
   newString.length = s.length + 1;
@@ -427,112 +513,6 @@ char stringEquals(String a, String b) {
   return TRUE;
 }
 
-//******************************************//
-//               String Array               //
-//******************************************//
-
-struct DynamicStringArray {
-  int length;
-  int capacity;
-  String *data;
-};
-
-DynamicStringArray dynamicStringArrayNew(int capacity) {
-  DynamicStringArray array = {0};
-  array.length = 0;
-  array.capacity = capacity;
-  array.data = malloc(sizeof(String) * array.capacity);
-  return array;
-}
-void dynamicStringArrayInsert(DynamicStringArray *array, String element, int index) {
-  int oldLength = array->length;
-  int newLength = array->length + 1;
-  if (newLength > array->capacity) {
-    String *arrayData = array->data;
-    array->capacity *= 2;
-    array->data = malloc(sizeof(String) * array->capacity);
-    for (int i = 0; i < oldLength; i++) {
-      array->data[i] = arrayData[i];
-    }
-    free(arrayData);
-  }
-  for (int i = newLength - 1; i > index; i--) {
-    array->data[i] = array->data[i-1];
-  }
-  array->data[index] = element;
-  array->length = newLength;
-}
-void dynamicStringArrayRemove(DynamicStringArray *array, int index) {
-  int oldLength = array->length;
-  int newLength = array->length - 1;
-  for (int i = index; i < newLength; i++) {
-    array->data[i] = array->data[i+1];
-  }
-  if (newLength < array->capacity/4) {
-    String *arrayData = array->data;
-    array->capacity /= 2;
-    array->data = malloc(sizeof(String) * array->capacity);
-    for (int i = 0; i < oldLength; i++) {
-      array->data[i] = arrayData[i];
-    }
-  }
-  array->length = newLength;
-}
-
-
-
-//******************************************//
-//               Int Array               //
-//******************************************//
-
-struct DynamicIntArray {
-  int length;
-  int capacity;
-  int *data;
-};
-
-DynamicIntArray dynamicIntArrayNew(int capacity) {
-  DynamicIntArray array = {0};
-  array.length = 0;
-  array.capacity = capacity;
-  array.data = malloc(sizeof(int) * array.capacity);
-  return array;
-}
-void dynamicIntArrayInsert(DynamicIntArray *array, int element, int index) {
-  int oldLength = array->length;
-  int newLength = array->length + 1;
-  if (newLength > array->capacity) {
-    int *arrayData = array->data;
-    array->capacity *= 2;
-    array->data = malloc(sizeof(int) * array->capacity);
-    for (int i = 0; i < oldLength; i++) {
-      array->data[i] = arrayData[i];
-    }
-    free(arrayData);
-  }
-  for (int i = newLength; i > index; i--) {
-    array->data[i] = array->data[i-1];
-  }
-  array->data[index] = element;
-  array->length = newLength;
-}
-void dynamicIntArrayRemove(DynamicIntArray *array, int index) {
-  int oldLength = array->length;
-  int newLength = array->length - 1;
-  for (int i = index; i < newLength; i++) {
-    array->data[i] = array->data[i+1];
-  }
-  if (newLength < array->capacity/4) {
-    int *arrayData = array->data;
-    array->capacity /= 2;
-    array->data = malloc(sizeof(int) * array->capacity);
-    for (int i = 0; i < oldLength; i++) {
-      array->data[i] = arrayData[i];
-    }
-  }
-  array->length = newLength;
-}
-
 
 
 //******************************************//
@@ -548,7 +528,7 @@ struct Viewport {
 };
 
 struct Sheet {
-  DynamicStringArray strings;
+  DArrayString strings;
   int columnCount;
   int rowCount;
 
@@ -557,8 +537,8 @@ struct Sheet {
   Boolean insertMode;
 
   // Split fields into SheetFormat struct
-  DynamicIntArray cellWidths;
-  DynamicIntArray cellHeights;
+  DArrayInt cellWidths;
+  DArrayInt cellHeights;
   int verticalPadding;
   int horizontalPadding;
 };
@@ -570,18 +550,18 @@ const float TEMP_TEXT_SCALE = 0.5;
 Sheet newSheet(int rowCount, int columnCount) {
   Sheet sheet = {0};
   int cellCount = columnCount * rowCount;
-  sheet.cellWidths = dynamicIntArrayNew(columnCount + 100);
-  sheet.cellHeights = dynamicIntArrayNew(rowCount + 1000);
-  sheet.strings = dynamicStringArrayNew(cellCount + 1000);
+  sheet.cellWidths = dArrayIntNew(columnCount + 100);
+  sheet.cellHeights = dArrayIntNew(rowCount + 1000);
+  sheet.strings = dArrayStringNew(cellCount + 1000);
   for (int i = 0; i < cellCount; i++) {
     String string = {0};
-    dynamicStringArrayInsert(&sheet.strings, string, i);
+    dArrayStringInsert(&sheet.strings, string, i);
   }
   for (int i = 0; i < columnCount; i++) {
-    dynamicIntArrayInsert(&sheet.cellWidths, TEMP_CELL_WIDTH, i);
+    dArrayIntInsert(&sheet.cellWidths, TEMP_CELL_WIDTH, i);
   }
   for (int i = 0; i < rowCount; i++) {
-    dynamicIntArrayInsert(&sheet.cellHeights, TEMP_CELL_HEIGHT, i);
+    dArrayIntInsert(&sheet.cellHeights, TEMP_CELL_HEIGHT, i);
   }
   sheet.verticalPadding = 4;
   sheet.horizontalPadding = 4;
@@ -594,34 +574,37 @@ void sheetDeleteRow(Sheet *sheet, int cellIndex) { // TODO: test
   int row = cellIndex / sheet->columnCount;
   int startCellOfRow = row * sheet->columnCount;
   int startCellOfNextRow = startCellOfRow + sheet->columnCount;
-  dynamicIntArrayRemove(&sheet->cellHeights, row);
+  dArrayIntRemove(&sheet->cellHeights, row);
   for (int i = startCellOfNextRow - 1; i >= startCellOfRow; i--) {
     printf("[REMOVE ME] i: %d\n", i);
-    dynamicStringArrayRemove(&sheet->strings, i);
+    dArrayStringRemove(&sheet->strings, i);
   }
   sheet->rowCount --;
 }
 
 // TODO: Make this function like sheetInsertRow and rename both this and sheetAppendColumn
 void sheetAppendRow(Sheet *sheet, int cellIndex) { // TODO: test
+  printf("[REMOVE ME] before\n");
   int selectedRow = cellIndex / sheet->columnCount;
   int startCellOfNewRow = selectedRow * sheet->columnCount;
   int startCellOfNextRow = startCellOfNewRow + sheet->columnCount;
-  dynamicIntArrayInsert(&sheet->cellHeights, TEMP_CELL_HEIGHT, selectedRow);
+  printf("[REMOVE ME] before\n");
+  dArrayIntInsert(&sheet->cellHeights, TEMP_CELL_HEIGHT, selectedRow);
+  printf("[REMOVE ME] after\n");
   for (int i = startCellOfNewRow; i < startCellOfNextRow; i++) {
     String string = {0};
-    dynamicStringArrayInsert(&sheet->strings, string, i);
+    dArrayStringInsert(&sheet->strings, string, i);
   }
   sheet->rowCount++;
 }
 
 void sheetAppendColumn(Sheet *sheet, int cellIndex) { // TODO: debug
   int selectedColumn = cellIndex % sheet->columnCount;
-  dynamicIntArrayInsert(&sheet->cellWidths, TEMP_CELL_WIDTH, selectedColumn); // TODO: is this insertion correct, same for sheetAppendRow
+  dArrayIntInsert(&sheet->cellWidths, TEMP_CELL_WIDTH, selectedColumn); // TODO: is this insertion correct, same for sheetAppendRow
   sheet->columnCount++;
   for (int row = 0; row < sheet->rowCount; row++) {
     String string = {0};
-    dynamicStringArrayInsert(&sheet->strings, string, row * sheet->columnCount + selectedColumn);
+    dArrayStringInsert(&sheet->strings, string, row * sheet->columnCount + selectedColumn);
   }
 }
 
@@ -872,10 +855,14 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
       int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
 
       switch (action.motion) {
-        case SHEET_TOP: {
+        case MTN_SHEET_TOP: {
           sheet->selectedCell = sheet->selectedCell % sheet->columnCount;
           viewport->anchorRow = clampToValue(viewport->anchorRow, -maxRowsOnScreen, 0, 0);
           break;
+        }
+        default: {
+          break;
+          assert(FALSE, "[aL9dsKLE] action.motion should never hit this");
         }
       }
       if (action.motion == 0) {
@@ -952,6 +939,12 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
   }
 }
 
+void commitAction(Sheet *sheet, Viewport *viewport, Action action) {
+  normalModeAction(sheet, viewport, action);
+  Action emptyAction = {0};
+  program.currentAction = emptyAction;
+}
+
 
 
 PangoLayout *initialisePangoLayout(Program program) {
@@ -1016,7 +1009,7 @@ void render(Program program, Sheet sheet, Viewport *viewport) {
   {
     int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
     int rowsOnScreen = maxRowsOnScreen > sheet.rowCount ? sheet.rowCount : maxRowsOnScreen;
-    rowNumberColumnWidth = intToString(rowsOnScreen).length * textWidthPixels + 2 * sheet.horizontalPadding;
+    rowNumberColumnWidth = stringFromLong(rowsOnScreen).length * textWidthPixels + 2 * sheet.horizontalPadding;
   }
   int xoffset = clamp((winAttribs.width - sheetWidth) / 2 - sheet.horizontalPadding, rowNumberColumnWidth, INT_MAX);
   int yoffset = clamp((winAttribs.height - sheetHeight) / 2 - sheet.verticalPadding, columnNumberRowHeight, INT_MAX);
@@ -1111,7 +1104,7 @@ void render(Program program, Sheet sheet, Viewport *viewport) {
   for (int row = 0; row < sheet.rowCount; row++) {
     cairo_save(program.cr);
 
-    String string = intToString(row + 1);
+    String string = stringFromLong(row + 1);
     pango_layout_set_text(layout, string.value, string.length);
     pango_layout_set_width(layout, TEMP_CELL_WIDTH * logicalRectPangoUnits.width + 2);
     pango_layout_set_height(layout, TEMP_CELL_HEIGHT * logicalRectPangoUnits.height + 2);
@@ -1180,6 +1173,178 @@ assert_zeroed((void*) &program.currentAction.text, sizeof(program.currentAction.
 return TRUE;
 }
 
+void handleKeyPress(XEvent event, Sheet *sheet, Viewport *viewport, Map mapCount, Map mapAction, Map mapMotion) {
+  KeySym keySymPressed = XLookupKeysym(&event.xkey, 0);
+  char *translatedCharArray = calloc(100, sizeof(char));
+  int translatedCharLength = XLookupString(&event.xkey, translatedCharArray, 100, NULL, NULL);
+  String translatedString = stringFromNative(translatedCharArray, translatedCharLength);
+  char translatedChar = translatedCharArray[0];
+
+  printf("[DEBUG] translatedChar: %s\n", translatedCharArray);
+  printf("[DEBUG] translatedChar (hex): %x\n", translatedChar);
+  printf("[DEBUG] translatedCharLength: %d\n", translatedCharLength);
+
+  if (event.xkey.state & LockMask) {
+    printf("[DEBUG] Lock is on\n");
+  }
+  if (event.xkey.state & ControlMask) {
+    printf("[DEBUG] Control is held\n");
+  }
+  if (event.xkey.state & ShiftMask) {
+    printf("[DEBUG] Shift is held\n");
+  }
+
+  if (translatedCharLength == 0) {
+    return;
+  }
+
+
+
+  ////////////////////////////////////////////////////////////////
+  // INSERT MODE
+  ////////////////////////////////////////////////////////////////
+  if (sheet->insertMode == TRUE) {
+    if (translatedChar == ESCAPE) {
+      sheet->insertMode = FALSE;
+      return;
+    }
+    else if (translatedChar == BACKSPACE) {
+      sheetCellBackSpace(*sheet, sheet->selectedCell, sheet->strings.data[sheet->selectedCell].length - 1);
+    }
+    else if (translatedChar < 0x20 || translatedChar == 0x7F) {
+      return;
+      // Not sure if this is a good blanket solution but doing
+      // this to prevent ctrl chars being rendered to the
+      // screen by typing e.g. CTRL-K or DELETE
+      // is this an exhaustive list of ctrl chars?
+    }
+    else {
+      sheetCellAppend(*sheet, sheet->selectedCell, &translatedChar, translatedCharLength);
+      program.lastAction.text = stringInsertChar(program.lastAction.text, translatedChar, program.lastAction.text.length);
+    }
+  }
+
+
+
+  ////////////////////////////////////////////////////////////////
+  // NORMAL MODE
+  ////////////////////////////////////////////////////////////////
+  else {
+    Action action = {0};
+    Action emptyAction = {0};
+    program.normalModeState = 0;
+
+    NORMAL_MODE_STATE nms = 0;
+    if (program.currentAction.action != 0) {
+      nms = NMS_MOTION;
+    }
+    else if (mapHasKey(&mapCount, translatedString)) {
+      nms = NMS_COUNT;
+    } 
+    else {
+      nms = NMS_ACTION;
+      if (event.xkey.state & ControlMask) {
+        /*translatedString = map*/
+      }
+    }
+
+    switch (nms) {
+      case NMS_COUNT: {
+        int count = mapLookup(&mapCount, translatedString);
+        if (count == INT_MAX) {
+          program.currentAction = emptyAction;
+        }
+        else {
+          program.currentAction.count = count;
+        }
+        break;
+      }
+      case NMS_ACTION: {
+  printf("[REMOVE ME] before\n");
+        NORMAL_MODE_ACTION action = mapLookup(&mapAction, translatedString);
+  printf("[REMOVE ME] before\n");
+        if (action == INT_MAX) {
+          program.currentAction.action = action;
+          program.currentAction = emptyAction;
+        }
+        else {
+          program.currentAction.action = action;
+          commitAction(sheet, viewport, program.currentAction);
+        }
+        break;
+      }
+      case NMS_MOTION: {
+        MOTION motion = mapLookup(&mapMotion, translatedString);
+        if (motion == INT_MAX) {
+          program.currentAction = emptyAction;
+        }
+        else {
+          program.currentAction.motion = motion;
+          commitAction(sheet, viewport, program.currentAction);
+        }
+        break;
+      }
+    }
+
+
+
+    /*if (event.xkey.state & ControlMask) {*/
+    /*  switch (keySymPressed) {*/
+    /*    case XK_d: {*/
+    /*      action.action = VIEWPORT_HALF_PAGE_DOWN;*/
+    /*      commitAction(sheet, viewport, action);*/
+    /*      break;*/
+    /*    }*/
+    /*  }*/
+    /*}*/
+    /*else {*/
+    /*  switch (translatedChar) {*/
+    /*    case 'd': {*/
+    /*      switch (program.normalModeState) {*/
+    /*        case COUNT_ACTION: {*/
+    /*          program.currentAction.action = DELETE_ROW;*/
+    /*          break;*/
+    /*        }*/
+    /*        case ACTION: {*/
+    /*          program.currentAction.action = DELETE_ROW;*/
+    /*          break;*/
+    /*        }*/
+    /*        case COUNT_ACTION_MOTION: {*/
+    /*          if (program.currentAction.action == DELETE_ROW) {*/
+    /*            program.currentAction.motion = MTN_ROW;*/
+    /*            for (int i = 0; i < program.currentAction.count; i++) {*/
+    /*              commitAction(sheet, viewport, action);*/
+    /*            }*/
+    /*            program.lastAction = action;*/
+    /*          } else {*/
+    /*            Action action = {0};*/
+    /*            program.currentAction = action;*/
+    /*          }*/
+    /*          break;*/
+    /*        }*/
+    /*        case ACTION_MOTION: {*/
+    /*          if (program.currentAction.action == DELETE_ROW) {*/
+    /*            action.motion = MTN_ROW;*/
+    /*            commitAction(sheet, viewport, action);*/
+    /*            program.lastAction = action;*/
+    /*          } else {*/
+    /*            Action action = {0};*/
+    /*            program.currentAction = action;*/
+    /*          }*/
+    /*          break;*/
+    /*        }*/
+    /*        default: {*/
+    /*          assert(FALSE, "FUCKED");*/
+    /*          break;*/
+    /*        }*/
+    /*      }*/
+    /*      break;*/
+    /*    }*/
+    /*  }*/
+    /*}*/
+  }
+  render(program, *sheet, viewport);
+}
 
 //******************************************//
 //               Main                       //
@@ -1188,7 +1353,7 @@ return TRUE;
 int main() {
   /*Map map = mapNew(1);*/
   /*for (int i = 0; i < 10000; i++) {*/
-  /*  String post = intToString(i);*/
+  /*  String post = stringFromLong(i);*/
   /*  String pre = { "key", 3 };*/
   /*  String key = stringCat(pre, post);*/
   /*  mapInsert(&map, key, i);*/
@@ -1215,6 +1380,10 @@ int main() {
   /**/
   /*mapInsert(&map, e1, 1);*/
   /*mapInsert(&map, e2, 2);*/
+
+  printf("[DEBUG] Application Initialising\n");
+  struct timespec tsPreInit;
+  clock_gettime(CLOCK_BOOTTIME, &tsPreInit);
 
 
 
@@ -1295,6 +1464,22 @@ int main() {
 //   XSetWMProperties(display, window, NULL, NULL, NULL, 0, NULL, NULL, &classHint);
   XMapWindow(display, window);
 
+  printf("[TRACE] X Initialised\n");
+
+
+
+  Screen *screen = XScreenOfDisplay(display, screen_number);
+  int width = XWidthOfScreen(screen);
+  int height = XHeightOfScreen(screen);
+  cairo_surface_t *surface = cairo_xlib_surface_create(display, window, XDefaultVisual(display, screen_number), width, height);
+  cairo_t *cr = cairo_create(surface);
+
+  PangoFontDescription *desc = pango_font_description_from_string("Liberation Mono 20");
+
+  printf("[TRACE] Cairo Context Initialised\n");
+
+
+
   /*
   Sheet conf = {0};
   int cellWidths[7] = {60,100,60,60,200,500,100};
@@ -1314,18 +1499,18 @@ int main() {
   sheetCellAppend(sheet, 0, "helyo", 5);
   sheet.selectedCell = 0;
 
+  printf("[TRACE] Spreadsheet Initialised\n");
+
+
+
   Viewport viewport = {0};
   /*viewport.maxCellCountTall = 3;*/
   /*viewport.maxCellCountWide = 3;*/
   /*viewport.hasFocus = TRUE;*/
 
-  Screen *screen = XScreenOfDisplay(display, screen_number);
-  int width = XWidthOfScreen(screen);
-  int height = XHeightOfScreen(screen);
-  cairo_surface_t *surface = cairo_xlib_surface_create(display, window, XDefaultVisual(display, screen_number), width, height);
-  cairo_t *cr = cairo_create(surface);
+  printf("[TRACE] Viewport Initialised\n");
 
-  PangoFontDescription *desc = pango_font_description_from_string("Liberation Mono 20");
+
 
   program.display = display;
   program.window = window;
@@ -1337,6 +1522,125 @@ int main() {
   program.highlight = highlight;
   program.foreground = foreground;
   program.text = text;
+
+  printf("[TRACE] Program Data Initialised\n");
+
+
+
+  String inputCharacter = {0};
+  inputCharacter.length = 1;
+
+  Map mapMotion = mapNew(100);
+
+  inputCharacter.value = "g";
+  mapInsert(&mapMotion, inputCharacter, MTN_SHEET_TOP);
+  inputCharacter.value = "d";
+  mapInsert(&mapMotion, inputCharacter, MTN_ROW);
+  inputCharacter.value = "y";
+  mapInsert(&mapMotion, inputCharacter, MTN_ROW);
+  inputCharacter.value = "c";
+  mapInsert(&mapMotion, inputCharacter, MTN_ROW);
+  /*mapInsert(&mapMotion, inputCharacter, MTN_COLUMN);*/
+  /*inputCharacter.value = "k";*/
+  mapInsert(&mapMotion, inputCharacter, MTN_ROW_UP);
+  inputCharacter.value = "j";
+  mapInsert(&mapMotion, inputCharacter, MTN_ROW_DOWN);
+  inputCharacter.value = "h";
+  mapInsert(&mapMotion, inputCharacter, MTN_COLUMN_LEFT);
+  inputCharacter.value = "l";
+  mapInsert(&mapMotion, inputCharacter, MTN_COLUMN_RIGHT);
+
+
+
+  Map mapAction = mapNew(100);
+
+  inputCharacter.value = "h";
+  mapInsert(&mapAction, inputCharacter, COLUMN_LEFT);
+  inputCharacter.value = "l";
+  mapInsert(&mapAction, inputCharacter, COLUMN_RIGHT);
+  inputCharacter.value = "k";
+  mapInsert(&mapAction, inputCharacter, ROW_UP);
+  inputCharacter.value = "j";
+  mapInsert(&mapAction, inputCharacter, ROW_DOWN);
+  inputCharacter.value = "M";
+  mapInsert(&mapAction, inputCharacter, SELECTED_CELL_CENTRE);
+  inputCharacter.value = "H";
+  mapInsert(&mapAction, inputCharacter, SELECTED_CELL_TOP);
+  inputCharacter.value = "L";
+  mapInsert(&mapAction, inputCharacter, SELECTED_CELL_BOTTOM);
+  inputCharacter.value = "0";
+  mapInsert(&mapAction, inputCharacter, SELECTED_CELL_BEGINNING);
+  inputCharacter.value = "$";
+  mapInsert(&mapAction, inputCharacter, SELECTED_CELL_END);
+  /*inputCharacter.value = "0";*/
+  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_ROW_UP);*/
+  /*inputCharacter.value = "0";*/
+  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_ROW_DOWN);*/
+  /*inputCharacter.value = "0";*/
+  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_COLUMN_LEFT);*/
+  /*inputCharacter.value = "0";*/
+  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_COLUMN_RIGHT);*/
+  /*inputCharacter.value = "0";*/
+  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_COLUMN_LEFT_HALF_PAGE);*/
+  /*inputCharacter.value = "0";*/
+  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_COLUMN_RIGHT_HALF_PAGE);*/
+  /*inputCharacter.value = "0";*/
+  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_PAGE_UP);*/
+  /*inputCharacter.value = "0";*/
+  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_PAGE_DOWN);*/
+  /*inputCharacter.value = "0";*/
+  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_HALF_PAGE_UP);*/
+  /*inputCharacter.value = "0";*/
+  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_HALF_PAGE_DOWN);*/
+  /*inputCharacter.value = "0";*/
+  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_GO_TO);*/
+  inputCharacter.value = "i";
+  mapInsert(&mapAction, inputCharacter, INSERT_BEGIN);
+  inputCharacter.value = "a";
+  mapInsert(&mapAction, inputCharacter, APPEND_COLUMN);
+  inputCharacter.value = "A";
+  mapInsert(&mapAction, inputCharacter, INSERT_COLUMN);
+  inputCharacter.value = "o";
+  mapInsert(&mapAction, inputCharacter, APPEND_ROW);
+  inputCharacter.value = "O";
+  mapInsert(&mapAction, inputCharacter, INSERT_ROW);
+  inputCharacter.value = "d";
+  mapInsert(&mapAction, inputCharacter, DELETE_ROW);
+
+
+
+
+  Map mapCount = mapNew(9);
+
+  inputCharacter.value = "1";
+  mapInsert(&mapCount, inputCharacter, 1);
+  inputCharacter.value = "2";
+  mapInsert(&mapCount, inputCharacter, 2);
+  inputCharacter.value = "3";
+  mapInsert(&mapCount, inputCharacter, 3);
+  inputCharacter.value = "4";
+  mapInsert(&mapCount, inputCharacter, 4);
+  inputCharacter.value = "5";
+  mapInsert(&mapCount, inputCharacter, 5);
+  inputCharacter.value = "6";
+  mapInsert(&mapCount, inputCharacter, 6);
+  inputCharacter.value = "7";
+  mapInsert(&mapCount, inputCharacter, 7);
+  inputCharacter.value = "8";
+  mapInsert(&mapCount, inputCharacter, 8);
+  inputCharacter.value = "9";
+  mapInsert(&mapCount, inputCharacter, 9);
+
+  printf("[TRACE] Input Maps Initialised\n");
+
+
+
+  struct timespec tsPostInit;
+  clock_gettime(CLOCK_BOOTTIME, &tsPostInit);
+  char *initDurationFormatted = tsFormat(tsPreInit, tsPostInit);
+  printf("[DEBUG] Application Initialisation Complete\n");
+  printf("[DEBUG] Application Initialisation took %s\n", initDurationFormatted);
+  printf("[DEBUG] Entering Event Loop\n");
 
 
 
@@ -1352,7 +1656,12 @@ int main() {
       // Expose
       //////////////////////////////////////////////////////////////////
       case Expose: {
+        printf("\n");
+        printf("[DEBUG] ========= BEGIN Expose =========\n");
+
         render(program, sheet, &viewport);
+
+        printf("[DEBUG] ========= END Expose =========\n");
         break;
 
         /*
@@ -1388,150 +1697,12 @@ int main() {
       // KeyPress
       //////////////////////////////////////////////////////////////////
       case KeyPress: {
-        KeySym keySymPressed = XLookupKeysym(&event.xkey, 0);
-        char *translatedCharArray = calloc(100, sizeof(char));
-        int translatedCharLength = XLookupString(&event.xkey, translatedCharArray, 100, NULL, NULL);
-        char translatedChar = translatedCharArray[0];
-        if (translatedCharLength == 0) {
-          break;
-        }
-
         printf("\n");
-        printf("[DEBUG] translatedChar: %s\n", translatedCharArray);
-        printf("[DEBUG] translatedChar (hex): %x\n", translatedChar);
-        printf("[DEBUG] translatedCharLength: %d\n", translatedCharLength);
-        printf("[DEBUG] event.xkey.state (hex): %x\n", event.xkey.state);
-        printf("[DEBUG] event.xkey.state (hex): %x\n", event.xkey.state & ShiftMask);
+        printf("[DEBUG] ========= BEGIN KeyPress =========\n");
 
-        if (event.xkey.state & LockMask) {
-          printf("[DEBUG] LockMask registered that Lock is on\n");
-        }
-        if (event.xkey.state & ControlMask) {
-          printf("[DEBUG] ControlMask registered that Control is held\n");
-        }
-        if (event.xkey.state & ShiftMask) {
-          printf("[DEBUG] ShiftMask registered that Shift is held\n");
-        }
+        handleKeyPress(event, &sheet, &viewport, mapCount, mapAction, mapMotion);
 
-
-
-        ////////////////////////////////////////////////////////////////
-        // INSERT MODE
-        ////////////////////////////////////////////////////////////////
-        if (sheet.insertMode == TRUE) {
-          if (translatedChar == ESCAPE) {
-            sheet.insertMode = FALSE;
-            break;
-          }
-          else if (translatedChar == BACKSPACE) {
-            sheetCellBackSpace(sheet, sheet.selectedCell, sheet.strings.data[sheet.selectedCell].length - 1);
-          }
-          else if (translatedChar < 0x20 || translatedChar == 0x7F) {
-            break;
-            // Not sure if this is a good blanket solution but doing
-            // this to prevent ctrl chars being rendered to the
-            // screen by typing e.g. CTRL-K or DELETE
-            // is this an exhaustive list of ctrl chars?
-          }
-          else {
-            sheetCellAppend(sheet, sheet.selectedCell, &translatedChar, translatedCharLength);
-            program.lastAction.text = stringInsertChar(program.lastAction.text, translatedChar, program.lastAction.text.length);
-          }
-        }
-
-
-
-        ////////////////////////////////////////////////////////////////
-        // NORMAL MODE
-        ////////////////////////////////////////////////////////////////
-        else {
-          {
-            Action action = {0};
-            Action emptyAction = {0};
-            program.normalModeState = 0;
-            switch (program.normalModeState) {
-              case MOTION: {
-                MOTION motion;
-                int err = motionMap(translatedChar, &motion);
-                if (err == 0) {
-                  program.currentAction.motion = motion;
-                }
-                else if (err == 1) {
-                  program.currentAction = emptyAction;
-                }
-              }
-              case ACTION: {
-                NORMAL_MODE_ACTION action;
-                int err = actionMap(translatedChar, &action);
-                if (err == 0) {
-                  program.currentAction.action = action;
-                }
-                else if (err == 1) {
-                  program.currentAction = emptyAction;
-                }
-              }
-            }
-
-
-
-            if (event.xkey.state & ControlMask) {
-              switch (keySymPressed) {
-                case XK_d: {
-                  action.action = VIEWPORT_HALF_PAGE_DOWN;
-                  normalModeAction(&sheet, &viewport, action);
-                  break;
-                }
-              }
-            }
-            else {
-              switch (translatedChar) {
-                case 'd': {
-                  switch (program.normalModeState) {
-                    case COUNT_ACTION: {
-                      program.currentAction.action = DELETE_ROW;
-                      break;
-                    }
-                    case ACTION: {
-                      program.currentAction.action = DELETE_ROW;
-                      break;
-                    }
-                    case COUNT_ACTION_MOTION: {
-                      if (program.currentAction.action == DELETE_ROW) {
-                        program.currentAction.motion = MTN_ROW;
-                        for (int i = 0; i < program.currentAction.count; i++) {
-                          normalModeAction(&sheet, &viewport, action);
-                        }
-                        program.lastAction = action;
-                      } else {
-                        Action action = {0};
-                        program.currentAction = action;
-                      }
-                      break;
-                    }
-                    case ACTION_MOTION: {
-                      if (program.currentAction.action == DELETE_ROW) {
-                        action.motion = MTN_ROW;
-                        normalModeAction(&sheet, &viewport, action);
-                        program.lastAction = action;
-                      } else {
-                        Action action = {0};
-                        program.currentAction = action;
-                      }
-                      break;
-                    }
-                    default: {
-                      assert(FALSE, "FUCKED");
-                      break;
-                    }
-                  }
-                  break;
-                }
-              }
-            }
-          }
-        }
-        render(program, sheet, &viewport);
-        break;
+        printf("[DEBUG] ========= END KeyPress =========\n");
       }
 
 
@@ -1552,9 +1723,14 @@ int main() {
       // ButtonPress
       //////////////////////////////////////////////////////////////////
       case ButtonPress: {
+        printf("\n");
+        printf("[DEBUG] ========= BEGIN ButtonPress =========\n");
+
         if (event.xbutton.button == Button1) {
           printf("Button1 press\n");
         }
+
+        printf("[DEBUG] ========= END ButtonPress =========\n");
         break;
       }
     }
@@ -1566,6 +1742,10 @@ int main() {
 
 
 // TODO: 
+// - sticky header column
+// - sticky header row
+// - read file
+// - save file
 // - improve memory manaegent (sheet.strings)
 // - fix: seg fault on too many o actions
 // - fix: crash on too many a actions
