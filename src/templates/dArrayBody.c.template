@@ -1,0 +1,44 @@
+DArray<TYPE_NAME> dArray<TYPE_NAME>New(int capacity) {
+  DArray<TYPE_NAME> array = {0};
+  array.length = 0;
+  array.capacity = capacity;
+  array.data = malloc(sizeof(int) * array.capacity);
+  return array;
+}
+
+void dArray<TYPE_NAME>Insert(DArray<TYPE_NAME> *array, <TYPE> element, int index) {
+  int oldLength = array->length;
+  int newLength = array->length + 1;
+  if (newLength > array->capacity) {
+    <TYPE> *arrayData = array->data;
+    array->capacity *= 2;
+    array->data = malloc(sizeof(int) * array->capacity);
+    for (int i = 0; i < oldLength; i++) {
+      array->data[i] = arrayData[i];
+    }
+    free(arrayData);
+  }
+  for (int i = newLength; i > index; i--) {
+    array->data[i] = array->data[i-1];
+  }
+  array->data[index] = element;
+  array->length = newLength;
+}
+
+void dArray<TYPE_NAME>Remove(DArray<TYPE_NAME> *array, int index) {
+  int oldLength = array->length;
+  int newLength = array->length - 1;
+  for (int i = index; i < newLength; i++) {
+    array->data[i] = array->data[i+1];
+  }
+  if (newLength < array->capacity/4) {
+    <TYPE> *arrayData = array->data;
+    array->capacity /= 2;
+    array->data = malloc(sizeof(int) * array->capacity);
+    for (int i = 0; i < oldLength; i++) {
+      array->data[i] = arrayData[i];
+    }
+  }
+  array->length = newLength;
+}
+

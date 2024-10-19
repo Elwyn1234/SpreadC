@@ -1,0 +1,12 @@
+typedef struct DArray<TYPE_NAME> DArray<TYPE_NAME>;
+
+DArray<TYPE_NAME> dArray<TYPE_NAME>New(int capacity);
+void dArray<TYPE_NAME>Insert(DArray<TYPE_NAME> *array, <TYPE> element, int index);
+void dArray<TYPE_NAME>Remove(DArray<TYPE_NAME> *array, int index);
+
+struct DArray<TYPE_NAME> {
+  int length;
+  int capacity;
+  <TYPE> *data;
+};
+
