@@ -26,5 +26,17 @@ struct DArrayInt {
   int *data;
 };
 
+typedef struct DArrayMapNode DArrayMapNode;
+
+DArrayMapNode dArrayMapNodeNew(int capacity);
+void dArrayMapNodeInsert(DArrayMapNode *array, MapNode element, int index);
+void dArrayMapNodeRemove(DArrayMapNode *array, int index);
+
+struct DArrayMapNode {
+  int length;
+  int capacity;
+  MapNode *data;
+};
+
 #endif
 

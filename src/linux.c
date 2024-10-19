@@ -43,7 +43,6 @@ typedef enum NORMAL_MODE_STATE NORMAL_MODE_STATE;
 typedef enum MOTION MOTION;
 typedef struct Action Action;
 typedef struct Program Program;
-typedef struct DynamicArrayMapNode DynamicArrayMapNode;
 
 PangoLayout *initialisePangoLayout(Program program);
 int clamp(int number, int lower, int higher);
@@ -315,71 +314,13 @@ char *tsFormat(struct timespec tsPre, struct timespec tsPost) {
 //////////////////////////////////////////////
 // Map
 //////////////////////////////////////////////
-
-struct MapNode {
-  String key;
-  int value;
-};
-
-struct DynamicArrayMapNode {
-  int length;
-  int capacity;
-  MapNode *data;
-};
-
-DynamicArrayMapNode dynamicArrayMapNodeNew(int capacity) {
-  DynamicArrayMapNode array = {0};
-  array.length = 0;
-  array.capacity = capacity;
-  array.data = malloc(sizeof(MapNode) * array.capacity);
-  return array;
-}
-
-void dynamicArrayMapNodeInsert(DynamicArrayMapNode *array, MapNode element, int index) {
-  int oldLength = array->length;
-  int newLength = array->length + 1;
-  if (newLength > array->capacity) {
-    MapNode *arrayData = array->data;
-    array->capacity *= 2;
-    array->data = malloc(sizeof(MapNode) * array->capacity);
-    for (int i = 0; i < oldLength; i++) {
-      array->data[i] = arrayData[i];
-    }
-    free(arrayData);
-  }
-  for (int i = newLength - 1; i > index; i--) {
-    array->data[i] = array->data[i-1];
-  }
-  array->data[index] = element;
-  array->length = newLength;
-}
-
-void dynamicArrayMapNodeRemove(DynamicArrayMapNode *array, int index) {
-  int oldLength = array->length;
-  int newLength = array->length - 1;
-  if (newLength < array->capacity/4) {
-    MapNode *arrayData = array->data;
-    array->capacity /= 2;
-    array->data = malloc(sizeof(MapNode) * array->capacity);
-    for (int i = 0; i < oldLength; i++) {
-      array->data[i] = arrayData[i];
-    }
-  }
-  for (int i = index; i < newLength; i++) {
-    array->data[i] = array->data[i+1];
-  }
-  array->length = newLength;
-}
-
-
-
 struct Map {
-  DynamicArrayMapNode arrayMapNode;
+  DArrayMapNode arrayMapNode;
 };
 
 Map mapNew(int capacity) {
   Map map = {0};
-  map.arrayMapNode = dynamicArrayMapNodeNew(capacity);
+  map.arrayMapNode = dArrayMapNodeNew(capacity);
   return map;
 }
 
@@ -405,7 +346,7 @@ void mapInsert(Map *map, String key, int value) {
   MapNode node = {0};
   node.key = key;
   node.value = value;
-  dynamicArrayMapNodeInsert(&map->arrayMapNode, node, map->arrayMapNode.length);
+  dArrayMapNodeInsert(&map->arrayMapNode, node, map->arrayMapNode.length);
 }
 
 int mapLookupIndex(Map *map, String key) {
@@ -422,7 +363,7 @@ int mapRemove(Map *map, String key) {
   if (index == INT_MAX) {
     return 1;
   }
-  dynamicArrayMapNodeRemove(&map->arrayMapNode, index);
+  dArrayMapNodeRemove(&map->arrayMapNode, index);
   return 0;
 }
 

@@ -1,6 +1,6 @@
 #!/bin/env bash
 
-type_list="String:String Int:int"
+type_list="String:String Int:int MapNode:MapNode"
 
 [[ -f src/dArray.c ]] && mv src/dArray.c /tmp/
 

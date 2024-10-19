@@ -7,5 +7,11 @@ struct String {
   int length;
 };
 
+typedef struct MapNode MapNode;
+struct MapNode {
+  String key;
+  int value;
+};
+
 #endif
 
