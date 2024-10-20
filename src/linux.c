@@ -715,6 +715,11 @@ void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
     case DELETE_ROW: {
       if (sheet->rowCount > 0)
         sheetDeleteRow(sheet, sheet->selectedCell);
+      if (sheet->selectedCell >= sheet->columnCount * sheet->rowCount) {
+        Action action = {0};
+        action.action = ROW_UP;
+        normalModeAction(sheet, viewport, action);
+      }
       break;
     }
     /* case '$': { // TODO */
