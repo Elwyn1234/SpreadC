@@ -313,65 +313,6 @@ char *tsFormat(struct timespec tsPre, struct timespec tsPost) {
 
 
 
-//////////////////////////////////////////////
-// Map
-//////////////////////////////////////////////
-/*struct Map {*/
-/*  DArrayMapNode arrayMapNode;*/
-/*};*/
-/**/
-/*Map mapNew(int capacity) {*/
-/*  Map map = {0};*/
-/*  map.arrayMapNode = dArrayMapNodeNew(capacity);*/
-/*  return map;*/
-/*}*/
-/**/
-/*int mapLookup(Map *map, String key) {*/
-/*  for(int i = 0; i < map->arrayMapNode.length; i++) {*/
-/*    if (stringEquals(key, map->arrayMapNode.data[i].key)) {*/
-/*      return map->arrayMapNode.data[i].value;*/
-/*    }*/
-/*  }*/
-/*  return INT_MAX;*/
-/*}*/
-/**/
-/*int mapHasKey(Map *map, String key) {*/
-/*  int result = mapLookup(map, key);*/
-/*  if (result == INT_MAX) {*/
-/*    return FALSE;*/
-/*  } else {*/
-/*    return TRUE;*/
-/*  }*/
-/*}*/
-/**/
-/*void mapInsert(Map *map, String key, int value) {*/
-/*  MapNode node = {0};*/
-/*  node.key = key;*/
-/*  node.value = value;*/
-/*  dArrayMapNodeInsert(&map->arrayMapNode, node, map->arrayMapNode.length);*/
-/*}*/
-/**/
-/*int mapLookupIndex(Map *map, String key) {*/
-/*  for(int i = 0; i < map->arrayMapNode.length; i++) {*/
-/*    if (stringEquals(key, map->arrayMapNode.data[i].key)) {*/
-/*      return i;*/
-/*    }*/
-/*  }*/
-/*  return INT_MAX;*/
-/*}*/
-/**/
-/*int mapRemove(Map *map, String key) {*/
-/*  int index = mapLookupIndex(map, key);*/
-/*  if (index == INT_MAX) {*/
-/*    return 1;*/
-/*  }*/
-/*  dArrayMapNodeRemove(&map->arrayMapNode, index);*/
-/*  return 0;*/
-/*}*/
-/**/
-
-
-
 //******************************************//
 //               Sheet                      //
 //******************************************//
