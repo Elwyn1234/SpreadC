@@ -1,10 +1,10 @@
 #!/bin/env bash
 
-type_list="String:String Int:int MapNode:MapNode"
+type_list="String:String Int:int MapNodeStringInt:MapNodeStringInt MapNodeIS:MapNodeIS"
 
-[[ -f src/dArray.c ]] && mv src/dArray.c /tmp/
+[[ -f ../generated/dArray.c ]] && mv ../generated/dArray.c /tmp/
 
-cat >> src/dArray.c << HEREDOC
+cat >> ../generated/dArray.c << HEREDOC
 #include "dArray.h"
 
 #include <stdlib.h>
@@ -14,18 +14,18 @@ HEREDOC
 for type_map in $type_list; do
   type_name=$(echo $type_map | cut -f1 -d:)
   type=$(echo $type_map | cut -f2 -d:)
-  cat src/templates/dArrayBody.c.template | \
+  cat dArrayBody.c.template | \
       sed "s/<TYPE_NAME>/$type_name/g" | \
       sed "s/<TYPE>/$type/g" \
-      >> src/dArray.c
+      >> ../generated/dArray.c
 done
 
 
 
-[[ -f src/dArray.h ]] && mv src/dArray.h /tmp/
+[[ -f ../generated/dArray.h ]] && mv ../generated/dArray.h /tmp/
 
-cat >> src/dArray.h << HEREDOC
-#include "types.h"
+cat >> ../generated/dArray.h << HEREDOC
+#include "../types.h"
 #ifndef _DARRAY_H
 #define _DARRAY_H
 
@@ -34,13 +34,13 @@ HEREDOC
 for type_map in $type_list; do
   type_name=$(echo $type_map | cut -f1 -d:)
   type=$(echo $type_map | cut -f2 -d:)
-  cat src/templates/dArrayHead.h.template | \
+  cat dArrayHead.h.template | \
       sed "s/<TYPE_NAME>/$type_name/g" | \
       sed "s/<TYPE>/$type/g" \
-      >> src/dArray.h
+      >> ../generated/dArray.h
 done
 
-cat >> src/dArray.h << HEREDOC
+cat >> ../generated/dArray.h << HEREDOC
 #endif
 
 HEREDOC

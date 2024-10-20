@@ -1,5 +1,7 @@
 #include "types.h"
-#include "dArray.h"
+#include "generated/dArray.h"
+#include "generated/map.h"
+#include "string.h"
 
 #include "cairo.h"
 #include "pango/pango-font.h"
@@ -314,136 +316,59 @@ char *tsFormat(struct timespec tsPre, struct timespec tsPost) {
 //////////////////////////////////////////////
 // Map
 //////////////////////////////////////////////
-struct Map {
-  DArrayMapNode arrayMapNode;
-};
-
-Map mapNew(int capacity) {
-  Map map = {0};
-  map.arrayMapNode = dArrayMapNodeNew(capacity);
-  return map;
-}
-
-int mapLookup(Map *map, String key) {
-  for(int i = 0; i < map->arrayMapNode.length; i++) {
-    if (stringEquals(key, map->arrayMapNode.data[i].key)) {
-      return map->arrayMapNode.data[i].value;
-    }
-  }
-  return INT_MAX;
-}
-
-int mapHasKey(Map *map, String key) {
-  int result = mapLookup(map, key);
-  if (result == INT_MAX) {
-    return FALSE;
-  } else {
-    return TRUE;
-  }
-}
-
-void mapInsert(Map *map, String key, int value) {
-  MapNode node = {0};
-  node.key = key;
-  node.value = value;
-  dArrayMapNodeInsert(&map->arrayMapNode, node, map->arrayMapNode.length);
-}
-
-int mapLookupIndex(Map *map, String key) {
-  for(int i = 0; i < map->arrayMapNode.length; i++) {
-    if (stringEquals(key, map->arrayMapNode.data[i].key)) {
-      return i;
-    }
-  }
-  return INT_MAX;
-}
-
-int mapRemove(Map *map, String key) {
-  int index = mapLookupIndex(map, key);
-  if (index == INT_MAX) {
-    return 1;
-  }
-  dArrayMapNodeRemove(&map->arrayMapNode, index);
-  return 0;
-}
-
-//******************************************//
-//                  String                  //
-//******************************************//
-
-String stringCat(String pre, String post) {
-  String new = {0};
-  new.length = pre.length + post.length;
-  new.value = malloc(sizeof(char) * (pre.length + post.length));
-  for (int i = 0; i < new.length; i++) {
-    if (i < pre.length) {
-      new.value[i] = pre.value[i];
-    } else {
-      int postIndex = i - pre.length;
-      new.value[i] = post.value[postIndex];
-    }
-  }
-  return new;
-}
-
-char *stringToNativeTerminated(String str) {
-  char *native = malloc(sizeof(char) * (str.length + 1));
-  for (int i = 0; i < str.length; i++) {
-    native[i] = str.value[i];
-  }
-  native[str.length] = '\0';
-  return native;
-}
-
-String stringFromNative(char *native, int length) {
-  String str = {0};
-  str.length = length;
-  str.value = calloc(sizeof(char), length);
-  for (int i = 0; i < length; i++) {
-    str.value[i] = native[i];
-  }
-  return str;
-}
-
-String stringFromNativeTerminated(char *native) {
-  int i = 0;
-  while (TRUE) {
-    if (native[i] == '\0') {
-      break;
-    }
-  }
-  int length = i;
-  return stringFromNative(native, length);
-}
-
-String stringInsertChar(String s, char c, int i) {
-  String newString = {0};
-  newString.length = s.length + 1;
-  newString.value = malloc(sizeof(char) * newString.length);
-  for (int oldStringIndex, newStringIndex = 0; newStringIndex < newString.length; newStringIndex++ && oldStringIndex++) {
-    if (i == newStringIndex) {
-      newString.value[newStringIndex] = c;
-      oldStringIndex--;
-      continue;
-    }
-    newString.value[newStringIndex] = s.value[oldStringIndex];
-  }
-  return newString;
-}
-
-char stringEquals(String a, String b) {
-  if (a.length != b.length) {
-    return FALSE;
-  }
-
-  for (int i = 0; i < a.length; i++) {
-    if (a.value[i] != b.value[i]) {
-      return FALSE;
-    }
-  }
-
-  return TRUE;
-}
+/*struct Map {*/
+/*  DArrayMapNode arrayMapNode;*/
+/*};*/
+/**/
+/*Map mapNew(int capacity) {*/
+/*  Map map = {0};*/
+/*  map.arrayMapNode = dArrayMapNodeNew(capacity);*/
+/*  return map;*/
+/*}*/
+/**/
+/*int mapLookup(Map *map, String key) {*/
+/*  for(int i = 0; i < map->arrayMapNode.length; i++) {*/
+/*    if (stringEquals(key, map->arrayMapNode.data[i].key)) {*/
+/*      return map->arrayMapNode.data[i].value;*/
+/*    }*/
+/*  }*/
+/*  return INT_MAX;*/
+/*}*/
+/**/
+/*int mapHasKey(Map *map, String key) {*/
+/*  int result = mapLookup(map, key);*/
+/*  if (result == INT_MAX) {*/
+/*    return FALSE;*/
+/*  } else {*/
+/*    return TRUE;*/
+/*  }*/
+/*}*/
+/**/
+/*void mapInsert(Map *map, String key, int value) {*/
+/*  MapNode node = {0};*/
+/*  node.key = key;*/
+/*  node.value = value;*/
+/*  dArrayMapNodeInsert(&map->arrayMapNode, node, map->arrayMapNode.length);*/
+/*}*/
+/**/
+/*int mapLookupIndex(Map *map, String key) {*/
+/*  for(int i = 0; i < map->arrayMapNode.length; i++) {*/
+/*    if (stringEquals(key, map->arrayMapNode.data[i].key)) {*/
+/*      return i;*/
+/*    }*/
+/*  }*/
+/*  return INT_MAX;*/
+/*}*/
+/**/
+/*int mapRemove(Map *map, String key) {*/
+/*  int index = mapLookupIndex(map, key);*/
+/*  if (index == INT_MAX) {*/
+/*    return 1;*/
+/*  }*/
+/*  dArrayMapNodeRemove(&map->arrayMapNode, index);*/
+/*  return 0;*/
+/*}*/
+/**/
 
 
 
@@ -1108,7 +1033,7 @@ assert_zeroed((void*) &program.currentAction.text, sizeof(program.currentAction.
 return TRUE;
 }
 
-void handleKeyPress(XEvent event, Sheet *sheet, Viewport *viewport, Map mapCount, Map mapAction, Map mapMotion) {
+void handleKeyPress(XEvent event, Sheet *sheet, Viewport *viewport, MapSI mapCount, MapSI mapAction, MapSI mapMotion, MapIS mapCtrlAction) {
   KeySym keySymPressed = XLookupKeysym(&event.xkey, 0);
   char *translatedCharArray = calloc(100, sizeof(char));
   int translatedCharLength = XLookupString(&event.xkey, translatedCharArray, 100, NULL, NULL);
@@ -1165,6 +1090,7 @@ void handleKeyPress(XEvent event, Sheet *sheet, Viewport *viewport, Map mapCount
   // NORMAL MODE
   ////////////////////////////////////////////////////////////////
   else {
+    char validInput = TRUE;
     Action action = {0};
     Action emptyAction = {0};
     program.normalModeState = 0;
@@ -1173,51 +1099,60 @@ void handleKeyPress(XEvent event, Sheet *sheet, Viewport *viewport, Map mapCount
     if (program.currentAction.action != 0) {
       nms = NMS_MOTION;
     }
-    else if (mapHasKey(&mapCount, translatedString)) {
+    else if (mapSIHasKey(&mapCount, translatedString)) {
       nms = NMS_COUNT;
     } 
     else {
       nms = NMS_ACTION;
       if (event.xkey.state & ControlMask) {
-        /*translatedString = map*/
+        char success;
+        translatedString = mapISLookup(&mapCtrlAction, keySymPressed, &success);
+        if (!success) {
+          printf("[WARNING] Unrecognised Ctrl key press: %lX\n", keySymPressed);
+          program.currentAction = emptyAction;
+          validInput = FALSE;
+        }
       }
     }
 
-    switch (nms) {
-      case NMS_COUNT: {
-        int count = mapLookup(&mapCount, translatedString);
-        if (count == INT_MAX) {
-          program.currentAction = emptyAction;
+    if (validInput) {
+      switch (nms) {
+        case NMS_COUNT: {
+          char success;
+          int count = mapSILookup(&mapCount, translatedString, &success);
+          if (success) {
+            program.currentAction.count = count;
+          }
+          else {
+            program.currentAction = emptyAction;
+          }
+          break;
         }
-        else {
-          program.currentAction.count = count;
+        case NMS_ACTION: {
+          char success;
+          NORMAL_MODE_ACTION action = mapSILookup(&mapAction, translatedString, &success);
+          if (success) {
+            program.currentAction.action = action;
+            commitAction(sheet, viewport, program.currentAction);
+          }
+          else {
+            program.currentAction.action = action;
+            program.currentAction = emptyAction;
+          }
+          break;
         }
-        break;
-      }
-      case NMS_ACTION: {
-  printf("[REMOVE ME] before\n");
-        NORMAL_MODE_ACTION action = mapLookup(&mapAction, translatedString);
-  printf("[REMOVE ME] before\n");
-        if (action == INT_MAX) {
-          program.currentAction.action = action;
-          program.currentAction = emptyAction;
+        case NMS_MOTION: {
+          char success;
+          MOTION motion = mapSILookup(&mapMotion, translatedString, &success);
+          if (success) {
+            program.currentAction.motion = motion;
+            commitAction(sheet, viewport, program.currentAction);
+          }
+          else {
+            program.currentAction = emptyAction;
+          }
+          break;
         }
-        else {
-          program.currentAction.action = action;
-          commitAction(sheet, viewport, program.currentAction);
-        }
-        break;
-      }
-      case NMS_MOTION: {
-        MOTION motion = mapLookup(&mapMotion, translatedString);
-        if (motion == INT_MAX) {
-          program.currentAction = emptyAction;
-        }
-        else {
-          program.currentAction.motion = motion;
-          commitAction(sheet, viewport, program.currentAction);
-        }
-        break;
       }
     }
 
@@ -1465,106 +1400,163 @@ int main() {
   String inputCharacter = {0};
   inputCharacter.length = 1;
 
-  Map mapMotion = mapNew(100);
+  MapSI mapMotion = mapSINew(100);
 
   inputCharacter.value = "g";
-  mapInsert(&mapMotion, inputCharacter, MTN_SHEET_TOP);
+  mapSIInsert(&mapMotion, inputCharacter, MTN_SHEET_TOP);
   inputCharacter.value = "d";
-  mapInsert(&mapMotion, inputCharacter, MTN_ROW);
+  mapSIInsert(&mapMotion, inputCharacter, MTN_ROW);
   inputCharacter.value = "y";
-  mapInsert(&mapMotion, inputCharacter, MTN_ROW);
+  mapSIInsert(&mapMotion, inputCharacter, MTN_ROW);
   inputCharacter.value = "c";
-  mapInsert(&mapMotion, inputCharacter, MTN_ROW);
-  /*mapInsert(&mapMotion, inputCharacter, MTN_COLUMN);*/
+  mapSIInsert(&mapMotion, inputCharacter, MTN_ROW);
+  /*mapSIInsert(&mapMotion, inputCharacter, MTN_COLUMN);*/
   /*inputCharacter.value = "k";*/
-  mapInsert(&mapMotion, inputCharacter, MTN_ROW_UP);
+  mapSIInsert(&mapMotion, inputCharacter, MTN_ROW_UP);
   inputCharacter.value = "j";
-  mapInsert(&mapMotion, inputCharacter, MTN_ROW_DOWN);
+  mapSIInsert(&mapMotion, inputCharacter, MTN_ROW_DOWN);
   inputCharacter.value = "h";
-  mapInsert(&mapMotion, inputCharacter, MTN_COLUMN_LEFT);
+  mapSIInsert(&mapMotion, inputCharacter, MTN_COLUMN_LEFT);
   inputCharacter.value = "l";
-  mapInsert(&mapMotion, inputCharacter, MTN_COLUMN_RIGHT);
+  mapSIInsert(&mapMotion, inputCharacter, MTN_COLUMN_RIGHT);
 
 
 
-  Map mapAction = mapNew(100);
+  MapIS mapCtrlAction = mapISNew(100);
+  {
+    String x;
+    x.value = "VIEWPORT_ROW_UP";
+    x.length = 15;
+    mapISInsert(&mapCtrlAction, XK_y, x);
+
+    x.value = "VIEWPORT_ROW_DOWN";
+    x.length = 17;
+    mapISInsert(&mapCtrlAction, XK_e, x);
+
+    x.value = "VIEWPORT_PAGE_UP";
+    x.length = 16;
+    mapISInsert(&mapCtrlAction, XK_b, x);
+
+    x.value = "VIEWPORT_PAGE_DOWN";
+    x.length = 18;
+    mapISInsert(&mapCtrlAction, XK_f, x);
+
+    x.value = "VIEWPORT_HALF_PAGE_UP";
+    x.length = 21;
+    mapISInsert(&mapCtrlAction, XK_u, x);
+
+    x.value = "VIEWPORT_HALF_PAGE_DOWN";
+    x.length = 23;
+    mapISInsert(&mapCtrlAction, XK_d, x);
+  }
+
+
+
+  MapSI mapAction = mapSINew(100);
 
   inputCharacter.value = "h";
-  mapInsert(&mapAction, inputCharacter, COLUMN_LEFT);
+  mapSIInsert(&mapAction, inputCharacter, COLUMN_LEFT);
   inputCharacter.value = "l";
-  mapInsert(&mapAction, inputCharacter, COLUMN_RIGHT);
+  mapSIInsert(&mapAction, inputCharacter, COLUMN_RIGHT);
   inputCharacter.value = "k";
-  mapInsert(&mapAction, inputCharacter, ROW_UP);
+  mapSIInsert(&mapAction, inputCharacter, ROW_UP);
   inputCharacter.value = "j";
-  mapInsert(&mapAction, inputCharacter, ROW_DOWN);
+  mapSIInsert(&mapAction, inputCharacter, ROW_DOWN);
   inputCharacter.value = "M";
-  mapInsert(&mapAction, inputCharacter, SELECTED_CELL_CENTRE);
+  mapSIInsert(&mapAction, inputCharacter, SELECTED_CELL_CENTRE);
   inputCharacter.value = "H";
-  mapInsert(&mapAction, inputCharacter, SELECTED_CELL_TOP);
+  mapSIInsert(&mapAction, inputCharacter, SELECTED_CELL_TOP);
   inputCharacter.value = "L";
-  mapInsert(&mapAction, inputCharacter, SELECTED_CELL_BOTTOM);
+  mapSIInsert(&mapAction, inputCharacter, SELECTED_CELL_BOTTOM);
   inputCharacter.value = "0";
-  mapInsert(&mapAction, inputCharacter, SELECTED_CELL_BEGINNING);
+  mapSIInsert(&mapAction, inputCharacter, SELECTED_CELL_BEGINNING);
   inputCharacter.value = "$";
-  mapInsert(&mapAction, inputCharacter, SELECTED_CELL_END);
+  mapSIInsert(&mapAction, inputCharacter, SELECTED_CELL_END);
   /*inputCharacter.value = "0";*/
-  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_ROW_UP);*/
+  /*mapSIInsert(&mapAction, inputCharacter, VIEWPORT_ROW_UP);*/
   /*inputCharacter.value = "0";*/
-  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_ROW_DOWN);*/
+  /*mapSIInsert(&mapAction, inputCharacter, VIEWPORT_ROW_DOWN);*/
+  inputCharacter.value = "b";
+  mapSIInsert(&mapAction, inputCharacter, VIEWPORT_COLUMN_LEFT);
+  inputCharacter.value = "e";
+  mapSIInsert(&mapAction, inputCharacter, VIEWPORT_COLUMN_RIGHT);
+  inputCharacter.value = "B";
+  mapSIInsert(&mapAction, inputCharacter, VIEWPORT_COLUMN_LEFT_HALF_PAGE);
+  inputCharacter.value = "E";
+  mapSIInsert(&mapAction, inputCharacter, VIEWPORT_COLUMN_RIGHT_HALF_PAGE);
   /*inputCharacter.value = "0";*/
-  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_COLUMN_LEFT);*/
+  /*mapSIInsert(&mapAction, inputCharacter, VIEWPORT_PAGE_UP);*/
   /*inputCharacter.value = "0";*/
-  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_COLUMN_RIGHT);*/
+  /*mapSIInsert(&mapAction, inputCharacter, VIEWPORT_PAGE_DOWN);*/
   /*inputCharacter.value = "0";*/
-  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_COLUMN_LEFT_HALF_PAGE);*/
+  /*mapSIInsert(&mapAction, inputCharacter, VIEWPORT_HALF_PAGE_UP);*/
   /*inputCharacter.value = "0";*/
-  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_COLUMN_RIGHT_HALF_PAGE);*/
-  /*inputCharacter.value = "0";*/
-  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_PAGE_UP);*/
-  /*inputCharacter.value = "0";*/
-  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_PAGE_DOWN);*/
-  /*inputCharacter.value = "0";*/
-  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_HALF_PAGE_UP);*/
-  /*inputCharacter.value = "0";*/
-  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_HALF_PAGE_DOWN);*/
-  /*inputCharacter.value = "0";*/
-  /*mapInsert(&mapAction, inputCharacter, VIEWPORT_GO_TO);*/
+  /*mapSIInsert(&mapAction, inputCharacter, VIEWPORT_HALF_PAGE_DOWN);*/
+  inputCharacter.value = "g";
+  mapSIInsert(&mapAction, inputCharacter, VIEWPORT_GO_TO);
   inputCharacter.value = "i";
-  mapInsert(&mapAction, inputCharacter, INSERT_BEGIN);
+  mapSIInsert(&mapAction, inputCharacter, INSERT_BEGIN);
   inputCharacter.value = "a";
-  mapInsert(&mapAction, inputCharacter, APPEND_COLUMN);
+  mapSIInsert(&mapAction, inputCharacter, APPEND_COLUMN);
   inputCharacter.value = "A";
-  mapInsert(&mapAction, inputCharacter, INSERT_COLUMN);
+  mapSIInsert(&mapAction, inputCharacter, INSERT_COLUMN);
   inputCharacter.value = "o";
-  mapInsert(&mapAction, inputCharacter, APPEND_ROW);
+  mapSIInsert(&mapAction, inputCharacter, APPEND_ROW);
   inputCharacter.value = "O";
-  mapInsert(&mapAction, inputCharacter, INSERT_ROW);
+  mapSIInsert(&mapAction, inputCharacter, INSERT_ROW);
   inputCharacter.value = "d";
-  mapInsert(&mapAction, inputCharacter, DELETE_ROW);
+  mapSIInsert(&mapAction, inputCharacter, DELETE_ROW);
+
+  {
+    String x;
+    x.value = "VIEWPORT_ROW_UP";
+    x.length = 15;
+    mapSIInsert(&mapAction, x, VIEWPORT_ROW_UP);
+
+    x.value = "VIEWPORT_ROW_DOWN";
+    x.length = 17;
+    mapSIInsert(&mapAction, x, VIEWPORT_ROW_DOWN);
+
+    x.value = "VIEWPORT_PAGE_UP";
+    x.length = 16;
+    mapSIInsert(&mapAction, x, VIEWPORT_PAGE_UP);
+
+    x.value = "VIEWPORT_PAGE_DOWN";
+    x.length = 18;
+    mapSIInsert(&mapAction, x, VIEWPORT_PAGE_DOWN);
+
+    x.value = "VIEWPORT_HALF_PAGE_UP";
+    x.length = 21;
+    mapSIInsert(&mapAction, x, VIEWPORT_HALF_PAGE_UP);
+
+    x.value = "VIEWPORT_HALF_PAGE_DOWN";
+    x.length = 23;
+    mapSIInsert(&mapAction, x, VIEWPORT_HALF_PAGE_DOWN);
+  }
 
 
 
 
-  Map mapCount = mapNew(9);
+  MapSI mapCount = mapSINew(9);
 
   inputCharacter.value = "1";
-  mapInsert(&mapCount, inputCharacter, 1);
+  mapSIInsert(&mapCount, inputCharacter, 1);
   inputCharacter.value = "2";
-  mapInsert(&mapCount, inputCharacter, 2);
+  mapSIInsert(&mapCount, inputCharacter, 2);
   inputCharacter.value = "3";
-  mapInsert(&mapCount, inputCharacter, 3);
+  mapSIInsert(&mapCount, inputCharacter, 3);
   inputCharacter.value = "4";
-  mapInsert(&mapCount, inputCharacter, 4);
+  mapSIInsert(&mapCount, inputCharacter, 4);
   inputCharacter.value = "5";
-  mapInsert(&mapCount, inputCharacter, 5);
+  mapSIInsert(&mapCount, inputCharacter, 5);
   inputCharacter.value = "6";
-  mapInsert(&mapCount, inputCharacter, 6);
+  mapSIInsert(&mapCount, inputCharacter, 6);
   inputCharacter.value = "7";
-  mapInsert(&mapCount, inputCharacter, 7);
+  mapSIInsert(&mapCount, inputCharacter, 7);
   inputCharacter.value = "8";
-  mapInsert(&mapCount, inputCharacter, 8);
+  mapSIInsert(&mapCount, inputCharacter, 8);
   inputCharacter.value = "9";
-  mapInsert(&mapCount, inputCharacter, 9);
+  mapSIInsert(&mapCount, inputCharacter, 9);
 
   printf("[TRACE] Input Maps Initialised\n");
 
@@ -1635,7 +1627,7 @@ int main() {
         printf("\n");
         printf("[DEBUG] ========= BEGIN KeyPress =========\n");
 
-        handleKeyPress(event, &sheet, &viewport, mapCount, mapAction, mapMotion);
+        handleKeyPress(event, &sheet, &viewport, mapCount, mapAction, mapMotion, mapCtrlAction);
 
         printf("[DEBUG] ========= END KeyPress =========\n");
       }
@@ -1677,6 +1669,7 @@ int main() {
 
 
 // TODO: 
+// - fix - delete not moving selected column
 // - sticky header column
 // - sticky header row
 // - read file

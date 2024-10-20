@@ -1,0 +1,53 @@
+Map<TYPE_MAP_POSTFIX> map<TYPE_MAP_POSTFIX>New(int capacity) {
+  Map<TYPE_MAP_POSTFIX> map = {0};
+  map.arrayMapNode = <FUNCTION_PREFIX_ARRAY>New(capacity);
+  return map;
+}
+
+int map<TYPE_MAP_POSTFIX>HasKey(Map<TYPE_MAP_POSTFIX> *map, <TYPE_KEY> key) {
+  char success;
+  <TYPE_VALUE> result = map<TYPE_MAP_POSTFIX>Lookup(map, key, &success);
+  return success;
+}
+
+void map<TYPE_MAP_POSTFIX>Insert(Map<TYPE_MAP_POSTFIX> *map, <TYPE_KEY> key, <TYPE_VALUE> value) {
+  <TYPE_NODE> node = {0};
+  node.key = key;
+  node.value = value;
+  <FUNCTION_PREFIX_ARRAY>Insert(&map->arrayMapNode, node, map->arrayMapNode.length);
+}
+
+char map<TYPE_MAP_POSTFIX>Remove(Map<TYPE_MAP_POSTFIX> *map, <TYPE_KEY> key) {
+  char success;
+  int index = map<TYPE_MAP_POSTFIX>LookupIndex(map, key, &success);
+  if (! success) {
+    return FALSE;
+  }
+  <FUNCTION_PREFIX_ARRAY>Remove(&map->arrayMapNode, index);
+  return TRUE;
+}
+
+
+
+<TYPE_VALUE> map<TYPE_MAP_POSTFIX>Lookup(Map<TYPE_MAP_POSTFIX> *map, <TYPE_KEY> key, char *success) {
+  for(int i = 0; i < map->arrayMapNode.length; i++) {
+    if (<COMPARATOR_FUNCTION_NAME>(key, map->arrayMapNode.data[i].key)) {
+      *success = TRUE;
+      return map->arrayMapNode.data[i].value;
+    }
+  }
+  *success = FALSE;
+  return map<TYPE_MAP_POSTFIX>DefaultValue();
+}
+
+int map<TYPE_MAP_POSTFIX>LookupIndex(Map<TYPE_MAP_POSTFIX> *map, <TYPE_KEY> key, char *success) {
+  for(int i = 0; i < map->arrayMapNode.length; i++) {
+    if (<COMPARATOR_FUNCTION_NAME>(key, map->arrayMapNode.data[i].key)) {
+      *success = TRUE;
+      return i;
+    }
+  }
+  *success = FALSE;
+  return 0;
+}
+

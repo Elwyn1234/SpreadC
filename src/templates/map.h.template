@@ -1,0 +1,19 @@
+typedef struct Map<TYPE_MAP_POSTFIX> Map<TYPE_MAP_POSTFIX>;
+struct Map<TYPE_MAP_POSTFIX> {
+  <TYPE_ARRAY> arrayMapNode;
+};
+
+// Map<TYPE_MAP_POSTFIX> mapNew(int capacity);
+// int mapLookup(Map<TYPE_MAP_POSTFIX> *map, <TYPE_KEY> key);
+// int mapHasKey(Map<TYPE_MAP_POSTFIX> *map, <TYPE_KEY> key);
+// void mapInsert(Map<TYPE_MAP_POSTFIX> *map, <TYPE_KEY> key, <TYPE_VALUE> value);
+// int mapLookupIndex(Map<TYPE_MAP_POSTFIX> *map, <TYPE_KEY> key);
+// int mapRemove(Map<TYPE_MAP_POSTFIX> *map, <TYPE_KEY> key);
+
+Map<TYPE_MAP_POSTFIX> map<TYPE_MAP_POSTFIX>New(int capacity);
+int map<TYPE_MAP_POSTFIX>HasKey(Map<TYPE_MAP_POSTFIX> *map, <TYPE_KEY> key);
+void map<TYPE_MAP_POSTFIX>Insert(Map<TYPE_MAP_POSTFIX> *map, <TYPE_KEY> key, <TYPE_VALUE> value);
+char map<TYPE_MAP_POSTFIX>Remove(Map<TYPE_MAP_POSTFIX> *map, <TYPE_KEY> key);
+<TYPE_VALUE> map<TYPE_MAP_POSTFIX>Lookup(Map<TYPE_MAP_POSTFIX> *map, <TYPE_KEY> key, char *success);
+int map<TYPE_MAP_POSTFIX>LookupIndex(Map<TYPE_MAP_POSTFIX> *map, <TYPE_KEY> key, char *success);
+

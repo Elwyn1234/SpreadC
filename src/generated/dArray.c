@@ -100,22 +100,22 @@ void dArrayIntRemove(DArrayInt *array, int index) {
   array->length = newLength;
 }
 
-DArrayMapNode dArrayMapNodeNew(int capacity) {
-  DArrayMapNode array = {0};
+DArrayMapNodeStringInt dArrayMapNodeStringIntNew(int capacity) {
+  DArrayMapNodeStringInt array = {0};
   array.length = 0;
   array.capacity = capacity;
-  array.data = malloc(sizeof(MapNode) * array.capacity);
+  array.data = malloc(sizeof(MapNodeStringInt) * array.capacity);
   return array;
 }
 
-void dArrayMapNodeInsert(DArrayMapNode *array, MapNode element, int index) {
+void dArrayMapNodeStringIntInsert(DArrayMapNodeStringInt *array, MapNodeStringInt element, int index) {
   int oldLength = array->length;
   int newLength = array->length + 1;
 
   if (newLength > array->capacity) {
-    MapNode *arrayData = array->data;
+    MapNodeStringInt *arrayData = array->data;
     array->capacity *= 2;
-    array->data = malloc(sizeof(MapNode) * array->capacity);
+    array->data = malloc(sizeof(MapNodeStringInt) * array->capacity);
     for (int i = 0; i < oldLength; i++) {
       array->data[i] = arrayData[i];
     }
@@ -129,14 +129,63 @@ void dArrayMapNodeInsert(DArrayMapNode *array, MapNode element, int index) {
   array->length = newLength;
 }
 
-void dArrayMapNodeRemove(DArrayMapNode *array, int index) {
+void dArrayMapNodeStringIntRemove(DArrayMapNodeStringInt *array, int index) {
   int oldLength = array->length;
   int newLength = array->length - 1;
 
   if (newLength < array->capacity/4) {
-    MapNode *arrayData = array->data;
+    MapNodeStringInt *arrayData = array->data;
     array->capacity /= 2;
-    array->data = malloc(sizeof(MapNode) * array->capacity);
+    array->data = malloc(sizeof(MapNodeStringInt) * array->capacity);
+    for (int i = 0; i < oldLength; i++) {
+      array->data[i] = arrayData[i];
+    }
+    free(arrayData);
+  }
+
+  for (int i = index; i < newLength; i++) {
+    array->data[i] = array->data[i+1];
+  }
+  array->length = newLength;
+}
+
+DArrayMapNodeIS dArrayMapNodeISNew(int capacity) {
+  DArrayMapNodeIS array = {0};
+  array.length = 0;
+  array.capacity = capacity;
+  array.data = malloc(sizeof(MapNodeIS) * array.capacity);
+  return array;
+}
+
+void dArrayMapNodeISInsert(DArrayMapNodeIS *array, MapNodeIS element, int index) {
+  int oldLength = array->length;
+  int newLength = array->length + 1;
+
+  if (newLength > array->capacity) {
+    MapNodeIS *arrayData = array->data;
+    array->capacity *= 2;
+    array->data = malloc(sizeof(MapNodeIS) * array->capacity);
+    for (int i = 0; i < oldLength; i++) {
+      array->data[i] = arrayData[i];
+    }
+    free(arrayData);
+  }
+
+  for (int i = newLength - 1; i > index; i--) {
+    array->data[i] = array->data[i-1];
+  }
+  array->data[index] = element;
+  array->length = newLength;
+}
+
+void dArrayMapNodeISRemove(DArrayMapNodeIS *array, int index) {
+  int oldLength = array->length;
+  int newLength = array->length - 1;
+
+  if (newLength < array->capacity/4) {
+    MapNodeIS *arrayData = array->data;
+    array->capacity /= 2;
+    array->data = malloc(sizeof(MapNodeIS) * array->capacity);
     for (int i = 0; i < oldLength; i++) {
       array->data[i] = arrayData[i];
     }
