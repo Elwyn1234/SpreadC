@@ -1,0 +1,26 @@
+- map insert should check for already inserted key. if so, mapPut function should be used
+- sticky header column
+- sticky header row
+- read file
+- save file
+- improve memory manaegent (sheet.strings)
+- fix: seg fault on too many o actions
+- fix: crash on too many a actions
+- fix: M is relative to the screen, not the sheet
+- need a nice way to simplify the complexity of implementing compositions (<count><action><motion>)
+  - improve <count>g implementation
+- fix: VIEWPORT_ROW_DOWN does not clamp selected cell
+- fix: VIEWPORT_ROW_UP does not clamp selected cell
+- fix: VIEWPORT_COLUMN_LEFT does not clamp selected cell
+- fix: VIEWPORT_COLUMN_RIGHT does not clamp selected cell
+- g<motion>
+- G
+- d<motion>
+- dd
+- clamp the viewport before rendering
+- ignore function keys
+- make the renderer render things relative to a point so that a cells text, extents, etc are all 'stuck' together
+- make i insert before text and a insert after text
+- Support keyToUpper for non alphabet characters such as $
+- Support scrolling
+- '.' doesnt work for certain input operations, i think my string handling is broken
