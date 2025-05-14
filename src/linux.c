@@ -1,3 +1,8 @@
+#include "types.h"
+#include "generated/dArray.h"
+#include "generated/map.h"
+#include "string.h"
+
 #include "cairo.h"
 #include "pango/pango-font.h"
 #include "pango/pango-glyph.h"
@@ -6,6 +11,7 @@
 #include <X11/X.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <time.h>
 #include <xcb/xcb.h>
 #include <xcb/xproto.h>
 #include <unistd.h>
@@ -16,21 +22,108 @@
 #include <pango/pangocairo.h>
 #include <cairo/cairo-xlib.h>
 // I have manually copied pango into /usr/include/. The same may have to be done for glib. It seems that xlibs font rendering uses X's core font rendering (at least by default) which is not modern and doesn't do things like anti-aliasing (I think) and which is why I am looking to pango. Pango builds on Xft which is also apparently not that modern. Sounds like pango is the go to low level library for font rendering.
+#define BACKSPACE                     0x0008
+#define TAB                           0x0009
+#define LINEFEED                      0x000a
+#define CLEAR                         0x000b
+#define RETURN                        0x000d
+#define PAUSE                         0x0013
+#define SCROLL_LOCK                   0x0014
+#define SYS_REQ                       0x0015
+#define ESCAPE                        0x001b
+#define DELETE                        0x00ff
 
+typedef struct Viewport Viewport;
+typedef struct Sheet Sheet;
+typedef struct Color Color;
 typedef char Boolean;
-typedef struct Color {
+typedef struct String String; 
+typedef struct MapNode MapNode; 
+typedef struct Map Map; 
+typedef enum NORMAL_MODE_ACTION NORMAL_MODE_ACTION;
+typedef enum NORMAL_MODE_STATE NORMAL_MODE_STATE;
+typedef enum MOTION MOTION;
+typedef struct Action Action;
+typedef struct Program Program;
+
+PangoLayout *initialisePangoLayout(Program program);
+int clamp(int number, int lower, int higher);
+int calculateMaxRowsOnScreen(XWindowAttributes winAttribs, int cellHeightPixels);
+int calculateMaxColumnsOnScreen(XWindowAttributes winAttribs, int cellHeightPixels);
+int calculateTextHeightPixels(PangoLayout *layout);
+int calculateTextWidthPixels(PangoLayout *layout);
+int calculateCellHeightPixels(int textHeightPixels, Sheet sheet);
+int calculateCellWidthPixels(int textHeightPixels, Sheet sheet);
+char stringEquals(String a, String b);
+char *stringToNativeTerminated(String str);
+String stringInsertChar(String s, char c, int i);
+String stringCat(String pre, String post);
+
+Program program;
+
+struct Color {
   double red;
   double blue;
   double green;
   double alpha;
-} Color;
+};
 
-typedef struct String {
-  char *value;
-  int length;
-} String;
+enum NORMAL_MODE_STATE {
+  NMS_MOTION = 1,
+  NMS_COUNT,
+  NMS_ACTION,
+  /*COUNT_ACTION,*/
+  /*COUNT_ACTION_MOTION,*/
+  /*ACTION_MOTION,*/
+};
 
-typedef struct Program {
+enum NORMAL_MODE_ACTION {
+  INSERT_BEGIN = 1,
+  INSERT_TEXT,
+  APPEND_COLUMN,
+  INSERT_COLUMN,
+  APPEND_ROW,
+  INSERT_ROW,
+  DELETE_ROW,
+};
+
+enum MOTION {
+  MTN_GO_TO = 1,
+  MTN_SELECTED_CELL_END,
+  MTN_SELECTED_CELL_BEGINNING,
+  MTN_SELECTED_CELL_BOTTOM,
+  MTN_SELECTED_CELL_TOP,
+  MTN_SELECTED_CELL_CENTRE,
+  MTN_ROW_DOWN,
+  MTN_ROW_UP,
+  MTN_COLUMN_RIGHT,
+  MTN_COLUMN_LEFT,
+  MTN_SHEET_TOP,
+  MTN_ROW,
+  MTN_COLUMN,
+};
+
+enum SCROLL {
+  SCR_ROW_DOWN = 1,
+  SCR_ROW_UP,
+  SCR_HALF_PAGE_DOWN,
+  SCR_HALF_PAGE_UP,
+  SCR_PAGE_DOWN,
+  SCR_PAGE_UP,
+  SCR_COLUMN_RIGHT,
+  SCR_COLUMN_LEFT,
+  SCR_COLUMN_RIGHT_HALF_PAGE,
+  SCR_COLUMN_LEFT_HALF_PAGE,
+};
+
+struct Action {
+  NORMAL_MODE_ACTION action;
+  int count;
+  MOTION motion;
+  String text;
+};
+
+struct Program {
   Display *display;
   Window window;
   GC gc;
@@ -42,16 +135,57 @@ typedef struct Program {
   XColor foreground;
   Color text;
 
-  Boolean shiftDown;
-  char lastCharKeyPressed;
-  String lastTextInserted;
-} Program;
+  NORMAL_MODE_STATE normalModeState;
+  Action lastAction;
+  Action currentAction;
+};
 
 
 
 //******************************************//
 //                   Util                   //
 //******************************************//
+
+void assert_lt_int(int value, int expected, char *assertionMessage) {
+  if (value >= expected) {
+    printf("[ASSERT] %s\n", assertionMessage);
+    exit(1);
+  }
+}
+
+void assert_gt_int(int value, int expected, char *assertionMessage) {
+  if (value <= expected) {
+    printf("[ASSERT] %s\n", assertionMessage);
+    exit(1);
+  }
+}
+
+void assert_equal_int(int value, int expected, char *assertionMessage) {
+  if (value != expected) {
+    printf("[ASSERT] %s\n", assertionMessage);
+    exit(1);
+  }
+}
+
+void assert_zeroed(char *value, int length, char *assertionMessage) {
+  for (int i = 0; i < length; i++) {
+    if (value[i] != 0) {
+      printf("[ASSERT] %s\n", assertionMessage);
+      exit(1);
+    }
+  }
+}
+
+void assert(char value, char *assertionMessage) {
+  if (! value) {
+    printf("[ASSERT] %s\n", assertionMessage);
+    exit(1);
+    // TODO: NEVER ASSERT IF PRODUCTION
+    // TODO: WRITE CUSTOM EXIT FUNCTION
+    // TODO: HOW TO PRINT STACK TRACE
+    // TODO: HOW TO CORE DUMP
+  }
+}
 
 char keyToUpper(char key) {
   if (key > 96 && key < 123) {
@@ -60,7 +194,33 @@ char keyToUpper(char key) {
   return key; // TODO
 }
 
-String intToString(int number) {
+String stringLeftPad(String s, char c, int count) {
+  String new = {0};
+  new.length = s.length + count;
+  new.value = malloc(sizeof(char) * (new.length));
+  for (int i = 0; i < count; i++) {
+    new.value[i] = c;
+  }
+  for (int i = count; i < new.length; i++) {
+    new.value[i] = s.value[i - count];
+  }
+  return new;
+}
+
+String stringLeftAlign(String s, char c, int size) {
+  if (s.length >= size) {
+    return s;
+  }
+  int padAmount = size - s.length;
+  return stringLeftPad(s, c, padAmount);
+}
+
+String stringTruncate(String s, int length) {
+  s.length = length;
+  return s;
+}
+
+String stringFromLong(long number) {
   String string = {0};
   string.length = 1;
   int a = number;
@@ -96,6 +256,16 @@ String intToLetters(int number) {
   return string;
 }
 
+int clampToValue(int number, int lower, int higher, int value) {
+  if (number < lower) {
+    return value;
+  }
+  if (number > higher) {
+    return value;
+  }
+  return number;
+}
+
 int clamp(int number, int lower, int higher) {
   if (number < lower) {
     return lower;
@@ -121,129 +291,23 @@ char keyPressedToChar(char *keyPressed) {
   return keyPressed[0];
 }
 
-//******************************************//
-//                  String                  //
-//******************************************//
+char *tsFormat(struct timespec tsPre, struct timespec tsPost) {
+  time_t sTime = tsPost.tv_sec - tsPre.tv_sec;
+  time_t nsTime = sTime == 0 ? (tsPost.tv_nsec - tsPre.tv_nsec) : tsPost.tv_nsec;
+  String sString = stringFromLong(sTime);
+  String nsString = stringFromLong(nsTime);
+  nsString = stringLeftAlign(nsString, '0', 9);
+  String msString = stringTruncate(nsString, 3);
 
-String stringInsertChar(String s, char c, int i) {
-  String newString = {0};
-  newString.length = s.length + 1;
-  newString.value = malloc(sizeof(char) * newString.length);
-  for (int oldStringIndex, newStringIndex = 0; newStringIndex < newString.length; newStringIndex++ && oldStringIndex++) {
-    if (i == newStringIndex) {
-      newString.value[newStringIndex] = c;
-      oldStringIndex--;
-      continue;
-    }
-    newString.value[newStringIndex] = s.value[oldStringIndex];
-  }
-  return newString;
-}
+  String x = { "s.", 2 };
+  String y = { "ms", 2 };
+  String formatted = stringCat(sString, x);
+  formatted = stringCat(formatted, msString);
+  formatted = stringCat(formatted, y);
+  
+  char *formattedNative = stringToNativeTerminated(formatted);
 
-//******************************************//
-//               String Array               //
-//******************************************//
-
-typedef struct DynamicStringArray {
-  int length;
-  int capacity;
-  String *data;
-} DynamicStringArray;
-
-DynamicStringArray dynamicStringArrayNew(int capacity) {
-  DynamicStringArray array = {0};
-  array.length = 0;
-  array.capacity = capacity;
-  array.data = malloc(sizeof(String) * array.capacity);
-  return array;
-}
-void dynamicStringArrayInsert(DynamicStringArray *array, String element, int index) {
-  int oldLength = array->length;
-  int newLength = array->length + 1;
-  if (newLength > array->capacity) {
-    String *arrayData = array->data;
-    array->capacity *= 2;
-    array->data = malloc(sizeof(String) * array->capacity);
-    for (int i = 0; i < oldLength; i++) {
-      array->data[i] = arrayData[i];
-    }
-    free(arrayData);
-  }
-  for (int i = newLength; i > index; i--) {
-    array->data[i] = array->data[i-1];
-  }
-  array->data[index] = element;
-  array->length = newLength;
-}
-void dynamicStringArrayRemove(DynamicStringArray *array, int element, int index) {
-  int oldLength = array->length;
-  int newLength = array->length - 1;
-  if (newLength < array->capacity/4) {
-    String *arrayData = array->data;
-    array->capacity /= 2;
-    array->data = malloc(sizeof(String) * array->capacity);
-    for (int i = 0; i < oldLength; i++) {
-      array->data[i] = arrayData[i];
-    }
-    for (int i = index; i < newLength; i++) {
-      array->data[i] = array->data[i+1];
-    }
-  }
-  array->length = newLength;
-}
-
-
-
-//******************************************//
-//               Int Array               //
-//******************************************//
-
-typedef struct DynamicIntArray {
-  int length;
-  int capacity;
-  int *data;
-} DynamicIntArray;
-
-DynamicIntArray dynamicIntArrayNew(int capacity) {
-  DynamicIntArray array = {0};
-  array.length = 0;
-  array.capacity = capacity;
-  array.data = malloc(sizeof(int) * array.capacity);
-  return array;
-}
-void dynamicIntArrayInsert(DynamicIntArray *array, int element, int index) {
-  int oldLength = array->length;
-  int newLength = array->length + 1;
-  if (newLength > array->capacity) {
-    int *arrayData = array->data;
-    array->capacity *= 2;
-    array->data = malloc(sizeof(int) * array->capacity);
-    for (int i = 0; i < oldLength; i++) {
-      array->data[i] = arrayData[i];
-    }
-    free(arrayData);
-  }
-  for (int i = newLength; i > index; i--) {
-    array->data[i] = array->data[i-1];
-  }
-  array->data[index] = element;
-  array->length = newLength;
-}
-void dynamicIntArrayRemove(DynamicIntArray *array, int element, int index) {
-  int oldLength = array->length;
-  int newLength = array->length - 1;
-  if (newLength < array->capacity/4) {
-    int *arrayData = array->data;
-    array->capacity /= 2;
-    array->data = malloc(sizeof(int) * array->capacity);
-    for (int i = 0; i < oldLength; i++) {
-      array->data[i] = arrayData[i];
-    }
-    for (int i = index; i < newLength; i++) {
-      array->data[i] = array->data[i+1];
-    }
-  }
-  array->length = newLength;
+  return formattedNative;
 }
 
 
@@ -252,36 +316,49 @@ void dynamicIntArrayRemove(DynamicIntArray *array, int element, int index) {
 //               Sheet                      //
 //******************************************//
 
-typedef struct Sheet {
-  DynamicIntArray cellWidths;
-  DynamicIntArray cellHeights;
-  DynamicStringArray strings;
+struct Viewport {
+  int anchorRow;
+  int anchorColumn;
+  /*int maxCellCountTall;*/
+  /*int maxCellCountWide;*/
+  /*Boolean hasFocus;*/
+};
+
+struct Sheet {
+  DArrayString strings;
   int columnCount;
   int rowCount;
+
+  // Split fields into SheetCursor struct
   int selectedCell;
   Boolean insertMode;
+
+  // Split fields into SheetFormat struct
+  DArrayInt cellWidths;
+  DArrayInt cellHeights;
   int verticalPadding;
   int horizontalPadding;
-} Sheet;
+};
 
 const int TEMP_CELL_WIDTH = 15;
 const int TEMP_CELL_HEIGHT = 3;
+const float TEMP_TEXT_SCALE = 0.5;
 
 Sheet newSheet(int rowCount, int columnCount) {
   Sheet sheet = {0};
   int cellCount = columnCount * rowCount;
-  sheet.cellWidths = dynamicIntArrayNew(columnCount + 100);
-  sheet.cellHeights = dynamicIntArrayNew(rowCount + 1000);
-  sheet.strings = dynamicStringArrayNew(cellCount + 1000);
+  sheet.cellWidths = dArrayIntNew(columnCount + 100);
+  sheet.cellHeights = dArrayIntNew(rowCount + 1000);
+  sheet.strings = dArrayStringNew(cellCount + 10);
   for (int i = 0; i < cellCount; i++) {
     String string = {0};
-    dynamicStringArrayInsert(&sheet.strings, string, i);
+    dArrayStringInsert(&sheet.strings, string, i);
   }
   for (int i = 0; i < columnCount; i++) {
-    dynamicIntArrayInsert(&sheet.cellWidths, TEMP_CELL_WIDTH, i);
+    dArrayIntInsert(&sheet.cellWidths, TEMP_CELL_WIDTH, i);
   }
   for (int i = 0; i < rowCount; i++) {
-    dynamicIntArrayInsert(&sheet.cellHeights, TEMP_CELL_HEIGHT, i);
+    dArrayIntInsert(&sheet.cellHeights, TEMP_CELL_HEIGHT, i);
   }
   sheet.verticalPadding = 4;
   sheet.horizontalPadding = 4;
@@ -290,26 +367,41 @@ Sheet newSheet(int rowCount, int columnCount) {
   return sheet;
 }
 
+void sheetDeleteRow(Sheet *sheet, int cellIndex) { // TODO: test
+  int row = cellIndex / sheet->columnCount;
+  int startCellOfRow = row * sheet->columnCount;
+  int startCellOfNextRow = startCellOfRow + sheet->columnCount;
+  dArrayIntRemove(&sheet->cellHeights, row);
+  for (int i = startCellOfNextRow - 1; i >= startCellOfRow; i--) {
+    printf("[REMOVE ME] i: %d\n", i);
+    dArrayStringRemove(&sheet->strings, i);
+  }
+  sheet->rowCount --;
+}
+
 // TODO: Make this function like sheetInsertRow and rename both this and sheetAppendColumn
 void sheetAppendRow(Sheet *sheet, int cellIndex) { // TODO: test
+  printf("[REMOVE ME] before\n");
   int selectedRow = cellIndex / sheet->columnCount;
   int startCellOfNewRow = selectedRow * sheet->columnCount;
   int startCellOfNextRow = startCellOfNewRow + sheet->columnCount;
-  dynamicIntArrayInsert(&sheet->cellHeights, TEMP_CELL_HEIGHT, selectedRow);
+  printf("[REMOVE ME] before\n");
+  dArrayIntInsert(&sheet->cellHeights, TEMP_CELL_HEIGHT, selectedRow);
+  printf("[REMOVE ME] after\n");
   for (int i = startCellOfNewRow; i < startCellOfNextRow; i++) {
     String string = {0};
-    dynamicStringArrayInsert(&sheet->strings, string, i);
+    dArrayStringInsert(&sheet->strings, string, i);
   }
   sheet->rowCount++;
 }
 
 void sheetAppendColumn(Sheet *sheet, int cellIndex) { // TODO: debug
   int selectedColumn = cellIndex % sheet->columnCount;
-  dynamicIntArrayInsert(&sheet->cellWidths, TEMP_CELL_WIDTH, selectedColumn); // TODO: is this insertion correct, same for sheetAppendRow
+  dArrayIntInsert(&sheet->cellWidths, TEMP_CELL_WIDTH, selectedColumn); // TODO: is this insertion correct, same for sheetAppendRow
   sheet->columnCount++;
   for (int row = 0; row < sheet->rowCount; row++) {
     String string = {0};
-    dynamicStringArrayInsert(&sheet->strings, string, row * sheet->columnCount + selectedColumn);
+    dArrayStringInsert(&sheet->strings, string, row * sheet->columnCount + selectedColumn);
   }
 }
 
@@ -334,128 +426,520 @@ void sheetCellAppend(Sheet sheet, int cellIndex, char* valueToInsert, int valueT
   sheet.strings.data[cellIndex] = str;
 }
 
-char handleNormalModeInput(Sheet *sheet, char charKeyPressed, Boolean useRecordedCommand, char lastCharKeyPressed, String text) {
-  switch (charKeyPressed) {
-    case 'h': {
-      sheet->selectedCell -= 1;
-      break;
-    }
-    case 'j': {
-      sheet->selectedCell += sheet->columnCount;
-      break;
-    }
-    case 'k': {
-      sheet->selectedCell -= sheet->columnCount;
-      break;
-    }
-    case 'l': {
-      sheet->selectedCell += 1;
-      break;
-    }
-    case 'i': {
-      if (useRecordedCommand && text.length) {
-        sheetCellAppend(*sheet, sheet->selectedCell, text.value, text.length);
+
+
+////////////////////////////////////////////////////////////////////////
+// NORMAL MODE ACTIONS
+////////////////////////////////////////////////////////////////////////
+void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
+  action.count = action.count == 0 ? 1 : action.count;
+  int rowStart;
+  int rowEnd;
+  switch (action.motion) {
+    case MTN_GO_TO: {
+      int row_x = sheet->selectedCell / sheet->rowCount;
+      int row_y = action.count;
+      if (row_x < row_y) {
+        rowStart = row_x;
+        rowEnd = row_y;
+      } else {
+        rowEnd = row_x;
+        rowStart = row_y;
       }
-      else {
-        sheet->insertMode = TRUE;
-      }
-      lastCharKeyPressed = 'i';
-      // INSERT MODE AT THE START OF THE STRING. Maybe ii does this, i puts you in "normal text mode" as opposed to "normal sheet mode"
       break;
     }
-    /* case 'I': { */
-    /*   sheet->insertMode = TRUE; */
-    /*   // INSERT MODE AT THE END OF THE STRING */
-    /*   break; */
-    /* } */
-    case 'a': {
-      sheetAppendColumn(sheet, sheet->selectedCell + 1);
-      int selectedRow = sheet->selectedCell / (sheet->columnCount - 1);
-      sheet->selectedCell += selectedRow + 1; // sheetAppendColumn will add insert a cell for each row
-      lastCharKeyPressed = 'a';
+    case MTN_COLUMN_RIGHT: {
       break;
     }
-    case 'A': {
-      // INSERT NEW COLUMN
-      sheetAppendColumn(sheet, sheet->selectedCell);
-      int selectedRow = sheet->selectedCell / (sheet->columnCount - 1);
-      sheet->selectedCell += selectedRow; // sheetAppendColumn will add insert a cell for each row
-      lastCharKeyPressed = 'A';
+    case MTN_COLUMN_LEFT: {
       break;
     }
-    case 'o': {
-      sheetAppendRow(sheet, sheet->selectedCell + sheet->columnCount);
-      sheet->selectedCell += sheet->columnCount;
-      lastCharKeyPressed = 'o';
+    case MTN_ROW_DOWN: {
+      rowStart = sheet->selectedCell / sheet->rowCount;
+      rowEnd = rowStart + action.count;
       break;
     }
-    case 'O': {
-      sheetAppendRow(sheet, sheet->selectedCell);
-      lastCharKeyPressed = 'O';
+    case MTN_ROW_UP: {
+      rowEnd = sheet->selectedCell / sheet->rowCount;
+      rowStart = rowEnd - action.count;
       break;
     }
-    case '.': { // TODO
-      handleNormalModeInput(sheet, lastCharKeyPressed, TRUE, 0, text);
+    case MTN_COLUMN: {
       break;
     }
-    /* case '$': { // TODO */
-    /*   sheetAppendRow(&sheet, sheet->selectedCell); */
-    /*   break; */
-    /* } */
-    /* case 'e': { // TODO */
-    /*   sheetAppendRow(&sheet, sheet->selectedCell); */
-    /*   break; */
-    /* } */
-    /* case 'Input.CTRL_E': { // TODO */
-    /*   sheetAppendRow(&sheet, sheet->selectedCell); */
-    /*   break; */
-    /* } */
-    /* case 'y???': { // TODO */
-    /*   sheetAppendRow(&sheet, sheet->selectedCell); */
-    /*   break; */
-    /* } */
-    /* case 'Input.CTRL_Y': { // TODO */
-    /*   sheetAppendRow(&sheet, sheet->selectedCell); */
-    /*   break; */
-    /* } */
+    case MTN_ROW: {
+      rowStart = sheet->selectedCell / sheet->rowCount;
+      rowEnd = rowStart;
+      break;
+    }
+    case MTN_SHEET_TOP: {
+      rowEnd = sheet->selectedCell / sheet->rowCount;
+      rowStart = 0;
+      break;
+    }
+    case MTN_SELECTED_CELL_CENTRE: {
+      break;
+    }
+    case MTN_SELECTED_CELL_TOP: {
+      break;
+    }
+    case MTN_SELECTED_CELL_BOTTOM: {
+      break;
+    }
+    case MTN_SELECTED_CELL_BEGINNING: {
+      break;
+    }
+    case MTN_SELECTED_CELL_END: {
+      break;
+    }
+    default: {
+      assert(FALSE, "[Rt3F9D6i] IM GONUAEFIUAIEF");
+      break;
+    }
   }
-  printf("lastCharKeyPressed: %c\n", lastCharKeyPressed);
-  return lastCharKeyPressed;
+
+  switch (action.action) {
+    case DELETE_ROW: {
+      printf("[DEBUG] Entering DELETE_ROW\n");
+      for (int i = rowStart; i <= rowEnd; i++) {
+        if (sheet->rowCount <= 0) break;
+        sheetDeleteRow(sheet, i * sheet->columnCount);
+      }
+      
+      // TODO FIX ME
+      /*if (sheet->selectedCell >= sheet->columnCount * sheet->rowCount) {*/
+      /*  Action action = {0};*/
+      /*  action.action = ROW_UP;*/
+      /*  normalModeAction(sheet, viewport, action);*/
+      /*}*/
+      break;
+    }
+
+
+
+    case INSERT_ROW: {
+      printf("[DEBUG] Entering INSERT_ROW\n");
+      for (int i = rowStart; i <= rowEnd; i++) {
+        sheetAppendRow(sheet, sheet->selectedCell);
+      }
+      break;
+    }
+    case APPEND_ROW: {
+      printf("[DEBUG] Entering APPEND_ROW\n");
+      for (int i = rowStart; i <= rowEnd; i++) {
+        sheetAppendRow(sheet, sheet->selectedCell + sheet->columnCount);
+    /*    Action action = {0};*/
+    /*    action.action = ROW_DOWN;*/
+    /*    action.count = 1;*/
+    /*    normalModeAction(sheet, viewport, action);*/
+      }
+      break;
+    }
+    case INSERT_COLUMN: {
+      printf("[DEBUG] Entering INSERT_COLUMN\n");
+      break;
+    }
+    case APPEND_COLUMN: {
+      printf("[DEBUG] Entering APPEND_COLUMN\n");
+      break;
+    }
+    case INSERT_TEXT: {
+      printf("[DEBUG] Entering INSERT_TEXT\n");
+      break;
+    }
+    case INSERT_BEGIN: {
+      printf("[DEBUG] Entering INSERT_BEGIN\n");
+      break;
+    }
+    default: {
+      assert(FALSE, "[Rt3F9D6h] IM GONUAEFIUAIEF");
+      break;
+    }
+  }
+
+
+  /*switch (action.action) {*/
+  /*  case COLUMN_LEFT: {*/
+  /*    if (sheet->selectedCell % sheet->columnCount > 0)*/
+  /*      sheet->selectedCell -= 1;*/
+  /*    break;*/
+  /*  }*/
+  /*  case ROW_DOWN: {*/
+  /*    if (sheet->selectedCell / sheet->columnCount >= sheet->rowCount - 1)*/
+  /*      break;*/
+  /**/
+  /*    PangoLayout *layout = initialisePangoLayout(program);*/
+  /*    int textHeightPixels = calculateTextHeightPixels(layout);*/
+  /*    int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);*/
+  /*    XWindowAttributes winAttribs = {0};*/
+  /*    XGetWindowAttributes(program.display, program.window, &winAttribs);*/
+  /*    int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);*/
+  /**/
+  /*    sheet->selectedCell += sheet->columnCount;*/
+  /*    int selectedRow = sheet->selectedCell / sheet->columnCount;*/
+  /*    // selectedToAnchor is the range from the selectedRow to the anchorRow. We add one to this because the range is inclusive*/
+  /*    int selectedToAnchor = selectedRow - viewport->anchorRow + 1;*/
+  /*    if (selectedToAnchor > maxRowsOnScreen) {*/
+  /*      viewport->anchorRow ++;*/
+  /*    }*/
+  /*    break;*/
+  /*  }*/
+  /*  case ROW_UP: {*/
+  /*    if (sheet->selectedCell / sheet->columnCount == 0)*/
+  /*      break;*/
+  /*    sheet->selectedCell -= sheet->columnCount;*/
+  /*    int selectedRow = sheet->selectedCell / sheet->columnCount;*/
+  /*    if (viewport->anchorRow > selectedRow) {*/
+  /*      viewport->anchorRow --;*/
+  /*    }*/
+  /*    break;*/
+  /*  }*/
+  /*  case COLUMN_RIGHT: {*/
+  /*    if (sheet->selectedCell % sheet->columnCount < sheet->columnCount - 1)*/
+  /*      sheet->selectedCell += 1;*/
+  /*    break;*/
+  /*  }*/
+  /*  case SELECTED_CELL_CENTRE: {*/
+  /*    PangoLayout *layout = initialisePangoLayout(program);*/
+  /*    int textHeightPixels = calculateTextHeightPixels(layout);*/
+  /*    int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);*/
+  /*    XWindowAttributes winAttribs = {0};*/
+  /*    XGetWindowAttributes(program.display, program.window, &winAttribs);*/
+  /*    int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);*/
+  /**/
+  //    /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/*/
+  /*    int topmostRow = viewport->anchorRow;*/
+  /*    sheet->selectedCell = topmostRow * sheet->columnCount + maxRowsOnScreen / 2 * sheet->columnCount + sheet->selectedCell % sheet->columnCount;*/
+  /*    break;*/
+  /*  }*/
+  /*  case SELECTED_CELL_TOP: {*/
+  //    /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/*/
+  /*    int topmostRow = viewport->anchorRow;*/
+  /*    int columnShift = sheet->selectedCell % sheet->columnCount;*/
+  /*    sheet->selectedCell = topmostRow * sheet->columnCount + columnShift;*/
+  /*    break;*/
+  /*  }*/
+  /*  case SELECTED_CELL_BOTTOM: {*/
+  /*    PangoLayout *layout = initialisePangoLayout(program);*/
+  /*    int textHeightPixels = calculateTextHeightPixels(layout);*/
+  /*    int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);*/
+  /*    XWindowAttributes winAttribs = {0};*/
+  /*    XGetWindowAttributes(program.display, program.window, &winAttribs);*/
+  /*    int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);*/
+  /**/
+  //    /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/*/
+  /*    int topmostRow = viewport->anchorRow;*/
+  /*    int rowShift = maxRowsOnScreen * sheet->columnCount - sheet->columnCount;*/
+  /*    int columnShift = sheet->selectedCell % sheet->columnCount;*/
+  /*    sheet->selectedCell = topmostRow * sheet->columnCount + rowShift + columnShift;*/
+  /*    break;*/
+  /*  }*/
+  /*  case SELECTED_CELL_BEGINNING: {*/
+  /*    sheet->selectedCell -= sheet->selectedCell % sheet->columnCount;*/
+  /*    break;*/
+  /*  }*/
+  /*  case SELECTED_CELL_END: {*/
+  /*    sheet->selectedCell += sheet->columnCount - 1 - sheet->selectedCell % sheet->columnCount;*/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_ROW_UP: {*/
+  /*    viewport->anchorRow --;*/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_ROW_DOWN: {*/
+  /*    viewport->anchorRow ++;*/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_COLUMN_RIGHT: {*/
+  /*    viewport->anchorColumn ++;*/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_COLUMN_LEFT: {*/
+  /*    viewport->anchorColumn --;*/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_COLUMN_LEFT_HALF_PAGE: {*/
+  /*    PangoLayout *layout = initialisePangoLayout(program);*/
+  /*    int textWidthPixels = calculateTextWidthPixels(layout);*/
+  /*    int cellWidthPixels = calculateCellWidthPixels(textWidthPixels, *sheet);*/
+  /*    XWindowAttributes winAttribs = {0};*/
+  /*    XGetWindowAttributes(program.display, program.window, &winAttribs);*/
+  /*    int maxColumnsOnScreen = calculateMaxColumnsOnScreen(winAttribs, cellWidthPixels);*/
+  /**/
+  /*    viewport->anchorColumn -= maxColumnsOnScreen / 2;*/
+  /**/
+  /*    int selectedColumn = viewport->anchorColumn + maxColumnsOnScreen - 1;*/
+  /*    selectedColumn = clamp(selectedColumn, 0, sheet->columnCount);*/
+  /*    int selectedRow = sheet->selectedCell / sheet->columnCount;*/
+  /*    sheet->selectedCell = selectedRow * sheet->columnCount + selectedColumn;*/
+  /**/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_COLUMN_RIGHT_HALF_PAGE: {*/
+  /*    PangoLayout *layout = initialisePangoLayout(program);*/
+  /*    int textWidthPixels = calculateTextWidthPixels(layout);*/
+  /*    int cellWidthPixels = calculateCellWidthPixels(textWidthPixels, *sheet);*/
+  /*    XWindowAttributes winAttribs = {0};*/
+  /*    XGetWindowAttributes(program.display, program.window, &winAttribs);*/
+  /*    int maxColumnsOnScreen = calculateMaxColumnsOnScreen(winAttribs, cellWidthPixels);*/
+  /**/
+  /*    viewport->anchorColumn += maxColumnsOnScreen / 2;*/
+  /**/
+  /*    int selectedColumn = viewport->anchorColumn;*/
+  /*    selectedColumn = clamp(selectedColumn, 0, sheet->columnCount);*/
+  /*    int selectedRow = sheet->selectedCell / sheet->columnCount;*/
+  /*    sheet->selectedCell = selectedRow * sheet->columnCount + selectedColumn;*/
+  /**/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_PAGE_UP: {*/
+  /*    PangoLayout *layout = initialisePangoLayout(program);*/
+  /*    int textHeightPixels = calculateTextHeightPixels(layout);*/
+  /*    int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);*/
+  /*    XWindowAttributes winAttribs = {0};*/
+  /*    XGetWindowAttributes(program.display, program.window, &winAttribs);*/
+  /*    int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);*/
+  /*    viewport->anchorRow -= maxRowsOnScreen;*/
+  /**/
+  /*    int rowShift = maxRowsOnScreen * sheet->columnCount - sheet->columnCount;*/
+  /*    int columnShift = sheet->selectedCell % sheet->columnCount;*/
+  //    /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/*/
+  /*    int topmostRow = viewport->anchorRow;*/
+  /*    sheet->selectedCell = topmostRow * sheet->columnCount + rowShift + columnShift;*/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_PAGE_DOWN: {*/
+  /*    PangoLayout *layout = initialisePangoLayout(program);*/
+  /*    int textHeightPixels = calculateTextHeightPixels(layout);*/
+  /*    int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);*/
+  /*    XWindowAttributes winAttribs = {0};*/
+  /*    XGetWindowAttributes(program.display, program.window, &winAttribs);*/
+  /*    int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);*/
+  /*    viewport->anchorRow += maxRowsOnScreen;*/
+  /**/
+  //    /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/*/
+  /*    int topmostRow = viewport->anchorRow;*/
+  /*    sheet->selectedCell = topmostRow * sheet->columnCount + sheet->selectedCell % sheet->columnCount;*/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_HALF_PAGE_UP: {*/
+  /*    PangoLayout *layout = initialisePangoLayout(program);*/
+  /*    int textHeightPixels = calculateTextHeightPixels(layout);*/
+  /*    int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);*/
+  /*    XWindowAttributes winAttribs = {0};*/
+  /*    XGetWindowAttributes(program.display, program.window, &winAttribs);*/
+  /*    int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);*/
+  /**/
+  /*    viewport->anchorRow -= maxRowsOnScreen / 2;*/
+  /*    if (maxRowsOnScreen % 2 == 1) {*/
+  /*      viewport->anchorRow --;*/
+  /*    }*/
+  /**/
+  /*    int selectedRow = sheet->selectedCell / sheet->columnCount;*/
+  /*    // selectedToAnchor is the range from the selectedRow to the anchorRow. We add one to this because the range is inclusive*/
+  /*    int selectedToAnchor = selectedRow - viewport->anchorRow + 1;*/
+  /*    if (selectedToAnchor > maxRowsOnScreen) {*/
+  /*      int rowShift = maxRowsOnScreen * sheet->columnCount - sheet->columnCount;*/
+  /*      int columnShift = sheet->selectedCell % sheet->columnCount;*/
+  //      /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/*/
+  /*      int topmostRow = viewport->anchorRow;*/
+  /*      sheet->selectedCell = topmostRow * sheet->columnCount + rowShift + columnShift;*/
+  /*    }*/
+  /**/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_HALF_PAGE_DOWN: {*/
+  /*    PangoLayout *layout = initialisePangoLayout(program);*/
+  /*    int textHeightPixels = calculateTextHeightPixels(layout);*/
+  /*    int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);*/
+  /*    XWindowAttributes winAttribs = {0};*/
+  /*    XGetWindowAttributes(program.display, program.window, &winAttribs);*/
+  /*    int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);*/
+  /**/
+  /*    viewport->anchorRow += maxRowsOnScreen / 2;*/
+  /*    if (maxRowsOnScreen % 2 == 1) {*/
+  /*      viewport->anchorRow ++;*/
+  /*    }*/
+  /**/
+  /*    int selectedRow = sheet->selectedCell / sheet->columnCount;*/
+  /*    if (viewport->anchorRow > selectedRow) {*/
+  //      /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/*/
+  /*      int topmostRow = viewport->anchorRow;*/
+  /*      sheet->selectedCell = topmostRow * sheet->columnCount + sheet->selectedCell % sheet->columnCount;*/
+  /*    }*/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_GO_TO: {*/
+  /*    PangoLayout *layout = initialisePangoLayout(program);*/
+  /*    int textHeightPixels = calculateTextHeightPixels(layout);*/
+  /*    int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);*/
+  /*    XWindowAttributes winAttribs = {0};*/
+  /*    XGetWindowAttributes(program.display, program.window, &winAttribs);*/
+  /*    int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);*/
+  /**/
+  /*    switch (action.motion) {*/
+  /*      case MTN_SHEET_TOP: {*/
+  /*        sheet->selectedCell = sheet->selectedCell % sheet->columnCount;*/
+  /*        viewport->anchorRow = clampToValue(viewport->anchorRow, -maxRowsOnScreen, 0, 0);*/
+  /*        break;*/
+  /*      }*/
+  /*      default: {*/
+  /*        break;*/
+  /*        assert(FALSE, "[aL9dsKLE] action.motion should never hit this");*/
+  /*      }*/
+  /*    }*/
+  /*    if (action.motion == 0) {*/
+  /*      assert_gt_int(action.count, 0, "[ckm+lVnh] action.count is not gt 0");*/
+  /*      int oneBasedRowIndex = action.count - 1;*/
+  /*      int columnShift = sheet->selectedCell % sheet->columnCount;*/
+  /*      sheet->selectedCell = oneBasedRowIndex * sheet->columnCount + columnShift;*/
+  /*      viewport->anchorRow = clampToValue(viewport->anchorRow, oneBasedRowIndex - maxRowsOnScreen + 1, oneBasedRowIndex, oneBasedRowIndex - maxRowsOnScreen / 2);*/
+  /*      viewport->anchorRow = clamp(viewport->anchorRow, 0, INT_MAX);*/
+  /*    }*/
+  /**/
+  /*    break;*/
+  /*  }*/
+  /*  case INSERT_BEGIN: {*/
+  /*    sheet->insertMode = TRUE;*/
+  /*    // INSERT MODE AT THE START OF THE STRING. Maybe ii does this, i puts you in "normal text mode" as opposed to "normal sheet mode"*/
+  /*    break;*/
+  /*  }*/
+  /*  case INSERT_TEXT:*/
+  /*    sheetCellAppend(*sheet, sheet->selectedCell, action.text.value, action.text.length);*/
+  /*    break;*/
+  //  /* case 'I': { */*/
+  //  /*   sheet->insertMode = TRUE; */*/
+  //  /*   // INSERT MODE AT THE END OF THE STRING */*/
+  //  /*   break; */*/
+  //  /* } */*/
+  /*  case APPEND_COLUMN: {*/
+  /*    sheetAppendColumn(sheet, sheet->selectedCell + 1);*/
+  /*    int selectedRow = sheet->selectedCell / (sheet->columnCount - 1);*/
+  /*    sheet->selectedCell += selectedRow + 1; // sheetAppendColumn will add insert a cell for each row*/
+  /*    break;*/
+  /*  }*/
+  /*  case INSERT_COLUMN: {*/
+  /*    // INSERT NEW COLUMN*/
+  /*    sheetAppendColumn(sheet, sheet->selectedCell);*/
+  /*    int selectedRow = sheet->selectedCell / (sheet->columnCount - 1);*/
+  /*    sheet->selectedCell += selectedRow; // sheetAppendColumn will add insert a cell for each row*/
+  /*    break;*/
+  /*  }*/
+  /*  case APPEND_ROW: {*/
+  /*    sheetAppendRow(sheet, sheet->selectedCell + sheet->columnCount);*/
+  /*    Action action = {0};*/
+  /*    action.action = ROW_DOWN;*/
+  /*    action.count = 1;*/
+  /*    normalModeAction(sheet, viewport, action);*/
+  /*    break;*/
+  /*  }*/
+  /*  case INSERT_ROW: {*/
+  /*    sheetAppendRow(sheet, sheet->selectedCell);*/
+  /*    break;*/
+  /*  }*/
+  //  /* case '$': { // TODO */*/
+  //  /*   sheetAppendRow(&sheet, sheet->selectedCell); */*/
+  //  /*   break; */*/
+  //  /* } */*/
+  //  /* case 'e': { // TODO */*/
+  //  /*   sheetAppendRow(&sheet, sheet->selectedCell); */*/
+  //  /*   break; */*/
+  //  /* } */*/
+  //  /* case 'Input.CTRL_E': { // TODO */*/
+  //  /*   sheetAppendRow(&sheet, sheet->selectedCell); */*/
+  //  /*   break; */*/
+  //  /* } */*/
+  //  /* case 'y???': { // TODO */*/
+  //  /*   sheetAppendRow(&sheet, sheet->selectedCell); */*/
+  //  /*   break; */*/
+  //  /* } */*/
+  //  /* case 'Input.CTRL_Y': { // TODO */*/
+  //  /*   sheetAppendRow(&sheet, sheet->selectedCell); */*/
+  //  /*   break; */*/
+  //  /* } */*/
+  /*}*/
+}
+
+void commitAction(Sheet *sheet, Viewport *viewport, Action action) {
+  normalModeAction(sheet, viewport, action);
+  Action emptyAction = {0};
+  program.currentAction = emptyAction;
 }
 
 
 
-//******************************************//
-//               Render                     //
-//******************************************//
-
-void render(Program program, Sheet sheet) {
-  XWindowAttributes winAttribs = {0};
-  XGetWindowAttributes(program.display, program.window, &winAttribs);
-
+PangoLayout *initialisePangoLayout(Program program) {
   PangoLayout *layout = pango_cairo_create_layout(program.cr);
   pango_layout_set_font_description(layout, program.font);
   pango_layout_set_text(layout, "a", -1);
-  float textScale = 0.5;
+  return layout;
+}
+
+int calculateTextHeightPixels(PangoLayout *layout) {
   PangoRectangle logicalRectPixels;
   pango_layout_get_pixel_extents(layout, NULL, &logicalRectPixels);
-  int textScaledHeightPixels = textScale * logicalRectPixels.height;
-  int textScaledWidthPixels = textScale * logicalRectPixels.width;
+  int textHeightPixels = TEMP_TEXT_SCALE * logicalRectPixels.height;
+  return textHeightPixels;
+}
 
-  int cellWidth = TEMP_CELL_WIDTH * textScaledWidthPixels + 2 * sheet.horizontalPadding;
-  int cellHeight = TEMP_CELL_HEIGHT * textScaledHeightPixels + 2 * sheet.verticalPadding;
-  int sheetWidth = sheet.columnCount * cellWidth;
-  int sheetHeight = sheet.rowCount * cellHeight;
+int calculateTextWidthPixels(PangoLayout *layout) {
+  PangoRectangle logicalRectPixels;
+  pango_layout_get_pixel_extents(layout, NULL, &logicalRectPixels);
+  int textWidthPixels = TEMP_TEXT_SCALE * logicalRectPixels.width;
+  return textWidthPixels;
+}
+
+int calculateCellWidthPixels(int textWidthPixels, Sheet sheet) {
+  int cellWidthPixels = TEMP_CELL_WIDTH * textWidthPixels + 2 * sheet.horizontalPadding;
+  return cellWidthPixels;
+} 
+int calculateCellHeightPixels(int textHeightPixels, Sheet sheet) {
+  int cellHeightPixels = TEMP_CELL_HEIGHT * textHeightPixels + 2 * sheet.verticalPadding;
+  return cellHeightPixels;
+} 
+
+int calculateMaxRowsOnScreen(XWindowAttributes winAttribs, int cellHeightPixels) {
+  int maxRowsOnScreen = (winAttribs.height) / cellHeightPixels;
+
+  return maxRowsOnScreen;
+}
+
+int calculateMaxColumnsOnScreen(XWindowAttributes winAttribs, int cellWidthPixels) {
+  int maxColumnsOnScreen = (winAttribs.width) / cellWidthPixels;
+
+  return maxColumnsOnScreen;
+}
+
+/////////////////////////////////////////////////////////////////////
+// Render
+/////////////////////////////////////////////////////////////////////
+void render(Program program, Sheet sheet, Viewport *viewport) {
+  XWindowAttributes winAttribs = {0};
+  XGetWindowAttributes(program.display, program.window, &winAttribs);
+  PangoLayout *layout = initialisePangoLayout(program);
+
+  int textHeightPixels = calculateTextHeightPixels(layout);
+  int textWidthPixels = calculateTextWidthPixels(layout);
+  int cellWidthPixels = calculateCellWidthPixels(textWidthPixels, sheet);
+  int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, sheet);
+  int sheetWidth = sheet.columnCount * cellWidthPixels;
+  int sheetHeight = sheet.rowCount * cellHeightPixels;
 
   int rowNumberColumnWidth = 0;
-  int columnNumberRowHeight = textScaledHeightPixels + 2 * sheet.verticalPadding;
+  int columnNumberRowHeight = textHeightPixels + 2 * sheet.verticalPadding;
   {
-    int maxRowsOnScreen = (winAttribs.height - cellHeight) / cellHeight;
+    int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
     int rowsOnScreen = maxRowsOnScreen > sheet.rowCount ? sheet.rowCount : maxRowsOnScreen;
-    rowNumberColumnWidth = intToString(rowsOnScreen).length * textScaledWidthPixels + 2 * sheet.horizontalPadding;
+    rowNumberColumnWidth = stringFromLong(rowsOnScreen).length * textWidthPixels + 2 * sheet.horizontalPadding;
   }
   int xoffset = clamp((winAttribs.width - sheetWidth) / 2 - sheet.horizontalPadding, rowNumberColumnWidth, INT_MAX);
   int yoffset = clamp((winAttribs.height - sheetHeight) / 2 - sheet.verticalPadding, columnNumberRowHeight, INT_MAX);
+  yoffset -= 1 * viewport->anchorRow * cellHeightPixels;
+  xoffset -= 1 * viewport->anchorColumn * cellWidthPixels;
+
+  printf("[DEBUG] sheet.selectedCell: %d\n", sheet.selectedCell);
+  printf("[DEBUG] selectedRow: %d\n", sheet.selectedCell / sheet.columnCount);
+  printf("[DEBUG] viewport->anchorRow: %d\n", viewport->anchorRow);
 
 
 
@@ -464,22 +948,30 @@ void render(Program program, Sheet sheet) {
   XSetForeground(program.display, program.gc, program.background.pixel);
   XFillRectangle(program.display, program.window, program.gc, 0, 0, winAttribs.width, winAttribs.height);
 
+
+
+  /////////////////////////////////////////////////////////////////////
   // Highlight the selected Cell
+  /////////////////////////////////////////////////////////////////////
   { // Use braces here to make it clear that the variables defined are only used here and not lower in the function
     int row = sheet.selectedCell / sheet.columnCount;
     int column = sheet.selectedCell % sheet.columnCount;
-    int x = TEMP_CELL_WIDTH * textScaledWidthPixels * column + xoffset + 2 * column * sheet.horizontalPadding;
-    int y = TEMP_CELL_HEIGHT * textScaledHeightPixels * row + yoffset + 2 * row * sheet.verticalPadding;
+    int x = TEMP_CELL_WIDTH * textWidthPixels * column + xoffset + 2 * column * sheet.horizontalPadding;
+    int y = TEMP_CELL_HEIGHT * textHeightPixels * row + yoffset + 2 * row * sheet.verticalPadding;
     XSetForeground(program.display, program.gc, program.highlight.pixel);
-    XFillRectangle(program.display, program.window, program.gc, x, y, cellWidth, cellHeight);
+    XFillRectangle(program.display, program.window, program.gc, x, y, cellWidthPixels, cellHeightPixels);
   }
 
   PangoRectangle logicalRectPangoUnits;
   pango_layout_get_extents(layout, NULL, &logicalRectPangoUnits);
-  // int textScaledHeightPangoUnits = textScale * logicalRectPangoUnits.height;
-  // int textScaledWidthPangoUnits = textScale * logicalRectPangoUnits.width;
+  // int textScaledHeightPangoUnits = TEMP_TEXT_SCALE * logicalRectPangoUnits.height;
+  // int textScaledWidthPangoUnits = TEMP_TEXT_SCALE * logicalRectPangoUnits.width;
 
+
+
+  /////////////////////////////////////////////////////////////////////
   // Render text for each cell
+  /////////////////////////////////////////////////////////////////////
   for (int i = 0; i < sheet.columnCount * sheet.rowCount; i++) {
     cairo_save(program.cr);
 
@@ -493,10 +985,10 @@ void render(Program program, Sheet sheet) {
 
     int column = i % sheet.columnCount;
     int row = i / sheet.columnCount;
-    int x = xoffset + column * TEMP_CELL_WIDTH * textScaledWidthPixels + 2 * column * sheet.horizontalPadding + sheet.horizontalPadding;
-    int y = yoffset + row * TEMP_CELL_HEIGHT * textScaledHeightPixels + 2 * row * sheet.verticalPadding + sheet.verticalPadding;
+    int x = xoffset + column * TEMP_CELL_WIDTH * textWidthPixels + 2 * column * sheet.horizontalPadding + sheet.horizontalPadding;
+    int y = yoffset + row * TEMP_CELL_HEIGHT * textHeightPixels + 2 * row * sheet.verticalPadding + sheet.verticalPadding;
     cairo_translate(program.cr, x, y);
-    cairo_scale(program.cr, textScale, textScale);
+    cairo_scale(program.cr, TEMP_TEXT_SCALE, TEMP_TEXT_SCALE);
     cairo_set_source_rgba(program.cr, program.text.red, program.text.green, program.text.blue, program.text.alpha);
 
     pango_cairo_show_layout(program.cr, layout);
@@ -504,7 +996,11 @@ void render(Program program, Sheet sheet) {
     cairo_restore(program.cr);
   }
   
+
+
+  /////////////////////////////////////////////////////////////////////
   // Render text for row numbering & column lettering
+  /////////////////////////////////////////////////////////////////////
   for (int column = 0; column < sheet.columnCount; column++) {
     cairo_save(program.cr);
 
@@ -516,10 +1012,10 @@ void render(Program program, Sheet sheet) {
     pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_END);
     pango_cairo_update_layout(program.cr, layout);
 
-    int x = xoffset + column * TEMP_CELL_WIDTH * textScaledWidthPixels + 2 * column * sheet.horizontalPadding + sheet.horizontalPadding;
-    int y = yoffset + sheet.verticalPadding - textScaledHeightPixels - 2 * sheet.verticalPadding;
+    int x = xoffset + column * TEMP_CELL_WIDTH * textWidthPixels + 2 * column * sheet.horizontalPadding + sheet.horizontalPadding;
+    int y = yoffset + sheet.verticalPadding - textHeightPixels - 2 * sheet.verticalPadding;
     cairo_translate(program.cr, x, y);
-    cairo_scale(program.cr, textScale, textScale);
+    cairo_scale(program.cr, TEMP_TEXT_SCALE, TEMP_TEXT_SCALE);
     cairo_set_source_rgba(program.cr, program.text.red, program.text.green, program.text.blue, program.text.alpha);
 
     pango_cairo_show_layout(program.cr, layout);
@@ -529,7 +1025,7 @@ void render(Program program, Sheet sheet) {
   for (int row = 0; row < sheet.rowCount; row++) {
     cairo_save(program.cr);
 
-    String string = intToString(row + 1);
+    String string = stringFromLong(row + 1);
     pango_layout_set_text(layout, string.value, string.length);
     pango_layout_set_width(layout, TEMP_CELL_WIDTH * logicalRectPangoUnits.width + 2);
     pango_layout_set_height(layout, TEMP_CELL_HEIGHT * logicalRectPangoUnits.height + 2);
@@ -538,9 +1034,9 @@ void render(Program program, Sheet sheet) {
     pango_cairo_update_layout(program.cr, layout);
 
     int x = xoffset + sheet.horizontalPadding - rowNumberColumnWidth;
-    int y = yoffset + row * TEMP_CELL_HEIGHT * textScaledHeightPixels + 2 * row * sheet.verticalPadding + sheet.verticalPadding;
+    int y = yoffset + row * TEMP_CELL_HEIGHT * textHeightPixels + 2 * row * sheet.verticalPadding + sheet.verticalPadding;
     cairo_translate(program.cr, x, y);
-    cairo_scale(program.cr, textScale, textScale);
+    cairo_scale(program.cr, TEMP_TEXT_SCALE, TEMP_TEXT_SCALE);
     cairo_set_source_rgba(program.cr, program.text.red, program.text.green, program.text.blue, program.text.alpha);
 
     pango_cairo_show_layout(program.cr, layout);
@@ -556,36 +1052,278 @@ void render(Program program, Sheet sheet) {
 
 
 
+  /////////////////////////////////////////////////////////////////////
   // Draw the Rows and Columns
+  /////////////////////////////////////////////////////////////////////
   XSetForeground(program.display, program.gc, program.foreground.pixel);
   XDrawLine(program.display, program.window, program.gc, winAttribs.x, winAttribs.y + yoffset, winAttribs.x + winAttribs.width, winAttribs.y + yoffset);
   for (int i = 0; i < sheet.rowCount; i++) {
-    int y = winAttribs.y + yoffset + cellHeight;
+    int y = winAttribs.y + yoffset + cellHeightPixels;
     int x1 = winAttribs.x;
     int x2 = winAttribs.x + winAttribs.width;
     XDrawLine(program.display, program.window, program.gc, x1, y, x2, y);
-    yoffset += cellHeight;
+    yoffset += cellHeightPixels;
   }
 
   XDrawLine(program.display, program.window, program.gc, winAttribs.x + xoffset, winAttribs.y, winAttribs.x + xoffset, winAttribs.y + winAttribs.height);
   for (int i = 0; i < sheet.columnCount; i++) {
-    int x = winAttribs.x + xoffset + cellWidth;
+    int x = winAttribs.x + xoffset + cellWidthPixels;
     int y1 = winAttribs.y;
     int y2 = winAttribs.y + winAttribs.height;
     XDrawLine(program.display, program.window, program.gc, x, y1, x , y2);
-    xoffset += cellWidth;
+    xoffset += cellWidthPixels;
   }
 
   // XFlush(program.display);
 }
 
 
+////////////////////////////////////////////////////////////////////////
+// KeyPress functions
+////////////////////////////////////////////////////////////////////////
+char validateUserInput() {
+// bad user input - abort and reset
+if (program.currentAction.action != 0) {
+  Action action = {0};
+  program.currentAction = action;
+  return FALSE;
+}
+assert_equal_int(program.currentAction.motion, 0, "[erfDJ05n] program.currentAction.motion is not 0");
+assert_zeroed((void*) &program.currentAction.text, sizeof(program.currentAction.text), "[P5f9O2Mu] program.currentAction.text is not zeroed");
+
+return TRUE;
+}
+
+void handleKeyPress(XEvent event, Sheet *sheet, Viewport *viewport, MapSI mapCount, MapSI mapAction, MapSI mapMotion, MapIS mapCtrlScroll) {
+  KeySym keySymPressed = XLookupKeysym(&event.xkey, 0);
+  char *translatedCharArray = calloc(100, sizeof(char));
+  int translatedCharLength = XLookupString(&event.xkey, translatedCharArray, 100, NULL, NULL);
+  String translatedString = stringFromNative(translatedCharArray, translatedCharLength);
+  char translatedChar = translatedCharArray[0];
+
+  printf("[DEBUG] translatedChar: %s\n", translatedCharArray);
+  printf("[DEBUG] translatedChar (hex): %x\n", translatedChar);
+  printf("[DEBUG] translatedCharLength: %d\n", translatedCharLength);
+
+  if (event.xkey.state & LockMask) {
+    printf("[DEBUG] Lock is on\n");
+  }
+  if (event.xkey.state & ControlMask) {
+    printf("[DEBUG] Control is held\n");
+  }
+  if (event.xkey.state & ShiftMask) {
+    printf("[DEBUG] Shift is held\n");
+  }
+
+  if (translatedCharLength == 0) {
+    return;
+  }
+
+
+
+  ////////////////////////////////////////////////////////////////
+  // INSERT MODE
+  ////////////////////////////////////////////////////////////////
+  if (sheet->insertMode == TRUE) {
+    if (translatedChar == ESCAPE) {
+      sheet->insertMode = FALSE;
+      return;
+    }
+    else if (translatedChar == BACKSPACE) {
+      sheetCellBackSpace(*sheet, sheet->selectedCell, sheet->strings.data[sheet->selectedCell].length - 1);
+    }
+    else if (translatedChar < 0x20 || translatedChar == 0x7F) {
+      return;
+      // Not sure if this is a good blanket solution but doing
+      // this to prevent ctrl chars being rendered to the
+      // screen by typing e.g. CTRL-K or DELETE
+      // is this an exhaustive list of ctrl chars?
+    }
+    else {
+      sheetCellAppend(*sheet, sheet->selectedCell, &translatedChar, translatedCharLength);
+      program.lastAction.text = stringInsertChar(program.lastAction.text, translatedChar, program.lastAction.text.length);
+    }
+  }
+
+
+
+  ////////////////////////////////////////////////////////////////
+  // NORMAL MODE
+  ////////////////////////////////////////////////////////////////
+  else {
+    char validInput = TRUE;
+    Action action = {0};
+    Action emptyAction = {0};
+    program.normalModeState = 0;
+
+    NORMAL_MODE_STATE nms = 0;
+    if (program.currentAction.action != 0) {
+      nms = NMS_MOTION;
+    }
+    else if (mapSIHasKey(&mapCount, translatedString)) {
+      nms = NMS_COUNT;
+    } 
+    else {
+      nms = NMS_ACTION;
+      if (event.xkey.state & ControlMask) {
+        char success;
+        translatedString = mapISLookup(&mapCtrlScroll, keySymPressed, &success);
+        if (!success) {
+          printf("[WARNING] Unrecognised Ctrl key press: %lX\n", keySymPressed);
+          program.currentAction = emptyAction;
+          validInput = FALSE;
+        }
+      }
+    }
+
+    if (validInput) {
+      switch (nms) {
+        case NMS_COUNT: {
+          printf("[DEBUG] Interpreting user input as count\n");
+          char success;
+          int count = mapSILookup(&mapCount, translatedString, &success);
+          if (success) {
+            program.currentAction.count = count;
+          }
+          else {
+            program.currentAction = emptyAction;
+            assert(FALSE, "[0LjluZvj] lookup on mapCount should never fail here");
+          }
+          break;
+        }
+        case NMS_ACTION: {
+          printf("[DEBUG] Interpreting user input as action\n");
+          char success;
+          NORMAL_MODE_ACTION action = mapSILookup(&mapAction, translatedString, &success);
+          if (success) {
+            program.currentAction.action = action;
+            /*commitAction(sheet, viewport, program.currentAction);*/
+          }
+          else {
+            program.currentAction.action = action;
+            program.currentAction = emptyAction;
+            printf("[INFO] User entered unsupported input key (action): %s\n", stringToNativeTerminated(translatedString));
+          }
+          break;
+        }
+        case NMS_MOTION: {
+          printf("[DEBUG] Interpreting user input as motion\n");
+          char success;
+          MOTION motion = mapSILookup(&mapMotion, translatedString, &success);
+          if (success) {
+            program.currentAction.motion = motion;
+            commitAction(sheet, viewport, program.currentAction);
+          }
+          else {
+            program.currentAction = emptyAction;
+            printf("[INFO] User entered unsupported input key (motion): %s\n", stringToNativeTerminated(translatedString));
+          }
+          break;
+        }
+      }
+    }
+
+
+
+    /*if (event.xkey.state & ControlMask) {*/
+    /*  switch (keySymPressed) {*/
+    /*    case XK_d: {*/
+    /*      action.action = VIEWPORT_HALF_PAGE_DOWN;*/
+    /*      commitAction(sheet, viewport, action);*/
+    /*      break;*/
+    /*    }*/
+    /*  }*/
+    /*}*/
+    /*else {*/
+    /*  switch (translatedChar) {*/
+    /*    case 'd': {*/
+    /*      switch (program.normalModeState) {*/
+    /*        case COUNT_ACTION: {*/
+    /*          program.currentAction.action = DELETE_ROW;*/
+    /*          break;*/
+    /*        }*/
+    /*        case ACTION: {*/
+    /*          program.currentAction.action = DELETE_ROW;*/
+    /*          break;*/
+    /*        }*/
+    /*        case COUNT_ACTION_MOTION: {*/
+    /*          if (program.currentAction.action == DELETE_ROW) {*/
+    /*            program.currentAction.motion = MTN_ROW;*/
+    /*            for (int i = 0; i < program.currentAction.count; i++) {*/
+    /*              commitAction(sheet, viewport, action);*/
+    /*            }*/
+    /*            program.lastAction = action;*/
+    /*          } else {*/
+    /*            Action action = {0};*/
+    /*            program.currentAction = action;*/
+    /*          }*/
+    /*          break;*/
+    /*        }*/
+    /*        case ACTION_MOTION: {*/
+    /*          if (program.currentAction.action == DELETE_ROW) {*/
+    /*            action.motion = MTN_ROW;*/
+    /*            commitAction(sheet, viewport, action);*/
+    /*            program.lastAction = action;*/
+    /*          } else {*/
+    /*            Action action = {0};*/
+    /*            program.currentAction = action;*/
+    /*          }*/
+    /*          break;*/
+    /*        }*/
+    /*        default: {*/
+    /*          assert(FALSE, "FUCKED");*/
+    /*          break;*/
+    /*        }*/
+    /*      }*/
+    /*      break;*/
+    /*    }*/
+    /*  }*/
+    /*}*/
+  }
+  render(program, *sheet, viewport);
+}
 
 //******************************************//
 //               Main                       //
 //******************************************//
 
 int main() {
+  /*Map map = mapNew(1);*/
+  /*for (int i = 0; i < 10000; i++) {*/
+  /*  String post = stringFromLong(i);*/
+  /*  String pre = { "key", 3 };*/
+  /*  String key = stringCat(pre, post);*/
+  /*  mapInsert(&map, key, i);*/
+  /*}*/
+  /*String keyToRemove1 = { "key1122", 7 };*/
+  /*String keyToRemove2 = { "key1124", 7 };*/
+  /*int mapRemoveResult1 = mapRemove(&map, keyToRemove1);*/
+  /*int mapRemoveResult2 = mapRemove(&map, keyToRemove2);*/
+  /*int mapRemoveResult3 = mapRemove(&map, keyToRemove2);*/
+  /*printf("mapRemoveResult1: %d\n", mapRemoveResult1);*/
+  /*printf("mapRemoveResult2: %d\n", mapRemoveResult2);*/
+  /*printf("mapRemoveResult3: %d\n", mapRemoveResult3);*/
+  /*String e1 = { "key1123", 7 };*/
+  /*int value1 = mapLookup(&map, keyToRemove1);*/
+  /*int value2 = mapLookup(&map, e1);*/
+  /*int value3 = mapLookup(&map, keyToRemove2);*/
+  /*printf("value1: %d\n", value1);*/
+  /*printf("value2: %d\n", value2);*/
+  /*printf("value3: %d\n", value3);*/
+
+  /*String e1 = { "key1", 4 };*/
+  /*String e2 = { "key2", 4 };*/
+  /*String e3 = { "key3", 4 };*/
+  /**/
+  /*mapInsert(&map, e1, 1);*/
+  /*mapInsert(&map, e2, 2);*/
+
+  printf("[DEBUG] Application Initialising\n");
+  struct timespec tsPreInit;
+  clock_gettime(CLOCK_BOOTTIME, &tsPreInit);
+
+
+
   Display* display = XOpenDisplay(NULL);
   int screen_number = XDefaultScreen(display);
   Window root = XRootWindow(display, screen_number);
@@ -663,6 +1401,22 @@ int main() {
 //   XSetWMProperties(display, window, NULL, NULL, NULL, 0, NULL, NULL, &classHint);
   XMapWindow(display, window);
 
+  printf("[TRACE] X Initialised\n");
+
+
+
+  Screen *screen = XScreenOfDisplay(display, screen_number);
+  int width = XWidthOfScreen(screen);
+  int height = XHeightOfScreen(screen);
+  cairo_surface_t *surface = cairo_xlib_surface_create(display, window, XDefaultVisual(display, screen_number), width, height);
+  cairo_t *cr = cairo_create(surface);
+
+  PangoFontDescription *desc = pango_font_description_from_string("Liberation Mono 20");
+
+  printf("[TRACE] Cairo Context Initialised\n");
+
+
+
   /*
   Sheet conf = {0};
   int cellWidths[7] = {60,100,60,60,200,500,100};
@@ -678,22 +1432,23 @@ int main() {
   }
   */
 
-  Sheet sheet = newSheet(3, 3);
+  Sheet sheet = newSheet(13, 5);
   sheetCellAppend(sheet, 0, "helyo", 5);
-  sheetCellAppend(sheet, 10, "helyo", 5);
-  sheetCellAppend(sheet, 20, "helyo", 5);
-  sheetCellAppend(sheet, 21, "helyo", 5);
-  sheet.selectedCell = 11;
+  sheet.selectedCell = 0;
 
-  Screen *screen = XScreenOfDisplay(display, screen_number);
-  int width = XWidthOfScreen(screen);
-  int height = XHeightOfScreen(screen);
-  cairo_surface_t *surface = cairo_xlib_surface_create(display, window, XDefaultVisual(display, screen_number), width, height);
-  cairo_t *cr = cairo_create(surface);
+  printf("[TRACE] Spreadsheet Initialised\n");
 
-  PangoFontDescription *desc = pango_font_description_from_string("Liberation Mono 20");
 
-  Program program = {0};
+
+  Viewport viewport = {0};
+  /*viewport.maxCellCountTall = 3;*/
+  /*viewport.maxCellCountWide = 3;*/
+  /*viewport.hasFocus = TRUE;*/
+
+  printf("[TRACE] Viewport Initialised\n");
+
+
+
   program.display = display;
   program.window = window;
   program.gc = gc;
@@ -705,13 +1460,197 @@ int main() {
   program.foreground = foreground;
   program.text = text;
 
+  printf("[TRACE] Program Data Initialised\n");
+
+
+
+  String inputCharacter = {0};
+  inputCharacter.length = 1;
+
+  MapSI mapMotion = mapSINew(100);
+
+  inputCharacter.value = "g";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_SHEET_TOP);
+  /*inputCharacter.value = "d";*/
+  /*mapSIInsert(&mapMotion, inputCharacter, MTN_ROW);*/
+  inputCharacter.value = "y";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_ROW);
+  inputCharacter.value = "c";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_ROW);
+  /*mapSIInsert(&mapMotion, inputCharacter, MTN_COLUMN);*/
+  /*inputCharacter.value = "k";*/
+  mapSIInsert(&mapMotion, inputCharacter, MTN_ROW_UP);
+  inputCharacter.value = "j";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_ROW_DOWN);
+  inputCharacter.value = "h";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_COLUMN_LEFT);
+  inputCharacter.value = "l";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_COLUMN_RIGHT);
+
+  inputCharacter.value = "h";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_COLUMN_LEFT);
+  inputCharacter.value = "l";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_COLUMN_RIGHT);
+  inputCharacter.value = "k";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_ROW_UP);
+  inputCharacter.value = "j";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_ROW_DOWN);
+  inputCharacter.value = "M";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_SELECTED_CELL_CENTRE);
+  inputCharacter.value = "H";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_SELECTED_CELL_TOP);
+  inputCharacter.value = "L";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_SELECTED_CELL_BOTTOM);
+  inputCharacter.value = "0";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_SELECTED_CELL_BEGINNING);
+  inputCharacter.value = "$";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_SELECTED_CELL_END);
+  inputCharacter.value = "g";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_GO_TO);
+
+
+
+  MapIS mapCtrlScroll = mapISNew(100);
+  {
+    String x;
+    x.value = "SCR_ROW_UP";
+    x.length = 15;
+    mapISInsert(&mapCtrlScroll, XK_y, x);
+
+    x.value = "SCR_ROW_DOWN";
+    x.length = 17;
+    mapISInsert(&mapCtrlScroll, XK_e, x);
+
+    x.value = "SCR_PAGE_UP";
+    x.length = 16;
+    mapISInsert(&mapCtrlScroll, XK_b, x);
+
+    x.value = "SCR_PAGE_DOWN";
+    x.length = 18;
+    mapISInsert(&mapCtrlScroll, XK_f, x);
+
+    x.value = "SCR_HALF_PAGE_UP";
+    x.length = 21;
+    mapISInsert(&mapCtrlScroll, XK_u, x);
+
+    x.value = "SCR_HALF_PAGE_DOWN";
+    x.length = 23;
+    mapISInsert(&mapCtrlScroll, XK_d, x);
+  }
+
+  MapSI mapScroll = mapSINew(100);
+  {
+    String x;
+    x.value = "SCR_ROW_UP";
+    x.length = 15;
+    mapSIInsert(&mapScroll, x, SCR_ROW_UP);
+
+    x.value = "SCR_ROW_DOWN";
+    x.length = 17;
+    mapSIInsert(&mapScroll, x, SCR_ROW_DOWN);
+
+    x.value = "SCR_PAGE_UP";
+    x.length = 16;
+    mapSIInsert(&mapScroll, x, SCR_PAGE_UP);
+
+    x.value = "SCR_PAGE_DOWN";
+    x.length = 18;
+    mapSIInsert(&mapScroll, x, SCR_PAGE_DOWN);
+
+    x.value = "SCR_HALF_PAGE_UP";
+    x.length = 21;
+    mapSIInsert(&mapScroll, x, SCR_HALF_PAGE_UP);
+
+    x.value = "SCR_HALF_PAGE_DOWN";
+    x.length = 23;
+    mapSIInsert(&mapScroll, x, SCR_HALF_PAGE_DOWN);
+
+    x.value = "b";
+    x.length = 1;
+    mapSIInsert(&mapMotion, x, SCR_COLUMN_LEFT);
+    x.value = "e";
+    x.length = 1;
+    mapSIInsert(&mapMotion, x, SCR_COLUMN_RIGHT);
+    x.value = "B";
+    x.length = 1;
+    mapSIInsert(&mapMotion, x, SCR_COLUMN_LEFT_HALF_PAGE);
+    x.value = "E";
+    x.length = 1;
+    mapSIInsert(&mapMotion, x, SCR_COLUMN_RIGHT_HALF_PAGE);
+  }
+
+
+
+  MapSI mapAction = mapSINew(100);
+
+  inputCharacter.value = "i";
+  mapSIInsert(&mapAction, inputCharacter, INSERT_BEGIN);
+  inputCharacter.value = "a";
+  mapSIInsert(&mapAction, inputCharacter, APPEND_COLUMN);
+  inputCharacter.value = "A";
+  mapSIInsert(&mapAction, inputCharacter, INSERT_COLUMN);
+  inputCharacter.value = "o";
+  mapSIInsert(&mapAction, inputCharacter, APPEND_ROW);
+  inputCharacter.value = "O";
+  mapSIInsert(&mapAction, inputCharacter, INSERT_ROW);
+  inputCharacter.value = "d";
+  mapSIInsert(&mapAction, inputCharacter, DELETE_ROW);
+
+
+
+
+  MapSI mapCount = mapSINew(9);
+
+  inputCharacter.value = "1";
+  mapSIInsert(&mapCount, inputCharacter, 1);
+  inputCharacter.value = "2";
+  mapSIInsert(&mapCount, inputCharacter, 2);
+  inputCharacter.value = "3";
+  mapSIInsert(&mapCount, inputCharacter, 3);
+  inputCharacter.value = "4";
+  mapSIInsert(&mapCount, inputCharacter, 4);
+  inputCharacter.value = "5";
+  mapSIInsert(&mapCount, inputCharacter, 5);
+  inputCharacter.value = "6";
+  mapSIInsert(&mapCount, inputCharacter, 6);
+  inputCharacter.value = "7";
+  mapSIInsert(&mapCount, inputCharacter, 7);
+  inputCharacter.value = "8";
+  mapSIInsert(&mapCount, inputCharacter, 8);
+  inputCharacter.value = "9";
+  mapSIInsert(&mapCount, inputCharacter, 9);
+
+  printf("[TRACE] Input Maps Initialised\n");
+
+
+
+  struct timespec tsPostInit;
+  clock_gettime(CLOCK_BOOTTIME, &tsPostInit);
+  char *initDurationFormatted = tsFormat(tsPreInit, tsPostInit);
+  printf("[DEBUG] Application Initialisation Complete\n");
+  printf("[DEBUG] Application Initialisation took %s\n", initDurationFormatted);
+  printf("[DEBUG] Entering Event Loop\n");
+
+
+
   XEvent event = {0};
   while (TRUE) {
     XNextEvent(display, &event);
 
     switch (event.type) {
+
+
+
+      //////////////////////////////////////////////////////////////////
+      // Expose
+      //////////////////////////////////////////////////////////////////
       case Expose: {
-        render(program, sheet);
+        printf("\n");
+        printf("[DEBUG] ========= BEGIN Expose =========\n");
+
+        render(program, sheet, &viewport);
+
+        printf("[DEBUG] ========= END Expose =========\n");
         break;
 
         /*
@@ -740,96 +1679,88 @@ int main() {
         */
 
       }
+
+
+
+      //////////////////////////////////////////////////////////////////
+      // KeyPress
+      //////////////////////////////////////////////////////////////////
       case KeyPress: {
-        KeySym keysym = XLookupKeysym(&event.xkey, 0);
-        char *keyPressed = XKeysymToString(keysym);
-        if (!keyPressed)
-          break;
+        printf("\n");
+        printf("[DEBUG] ========= BEGIN KeyPress =========\n");
 
-        if (stringsEqual("Shift_L", 7, keyPressed)) {
-          program.shiftDown = TRUE;
-        }
+        handleKeyPress(event, &sheet, &viewport, mapCount, mapAction, mapMotion, mapCtrlScroll);
 
-        if (sheet.insertMode == TRUE && !IsModifierKey(keysym) && !IsFunctionKey(keysym)) {
-          if (stringsEqual("Escape", 6, keyPressed)) {
-            sheet.insertMode = FALSE;
-            break;
-          }
-          else if (stringsEqual("space", 5, keyPressed)) {
-            sheetCellAppend(sheet, sheet.selectedCell, " ", 1);
-          }
-          else if (stringsEqual("Return", 6, keyPressed)) {
-            sheetCellAppend(sheet, sheet.selectedCell, "\n", 1);
-          }
-          else if (stringsEqual("BackSpace", 9, keyPressed)) {
-            sheetCellBackSpace(sheet, sheet.selectedCell, sheet.strings.data[sheet.selectedCell].length - 1);
-          }
-          else {
-            char valueToInsert = *keyPressed;
-            if (program.shiftDown) {
-              valueToInsert = keyToUpper(*keyPressed);
-            }
-            int valueToInsertLength = 1;
-            sheetCellAppend(sheet, sheet.selectedCell, &valueToInsert, valueToInsertLength);
-            program.lastTextInserted = stringInsertChar(program.lastTextInserted, valueToInsert, program.lastTextInserted.length);
-          }
-        }
-        else {
-          char charKeyPressed = keyPressedToChar(keyPressed);
-          if (program.shiftDown) {
-            charKeyPressed = keyToUpper(charKeyPressed);
-          }
-          String placeholder = {0};
-          program.lastCharKeyPressed = handleNormalModeInput(&sheet, charKeyPressed, FALSE, program.lastCharKeyPressed, program.lastTextInserted);
-        }
-        render(program, sheet);
-        break;
+        printf("[DEBUG] ========= END KeyPress =========\n");
       }
+
+
+      //////////////////////////////////////////////////////////////////
+      // KeyRelease
+      //////////////////////////////////////////////////////////////////
       case KeyRelease: {
         KeySym keysym = XLookupKeysym(&event.xkey, 0);
         char *keyReleased = XKeysymToString(keysym);
         if (!keyReleased)
           break;
-        if (stringsEqual("Shift_L", 7, keyReleased)) {
-          program.shiftDown = FALSE;
-        }
         break;
       }
+
+
+
+      //////////////////////////////////////////////////////////////////
+      // ButtonPress
+      //////////////////////////////////////////////////////////////////
       case ButtonPress: {
+        printf("\n");
+        printf("[DEBUG] ========= BEGIN ButtonPress =========\n");
+
         if (event.xbutton.button == Button1) {
           printf("Button1 press\n");
         }
+
+        printf("[DEBUG] ========= END ButtonPress =========\n");
         break;
       }
     }
   }
 
+
   return 0;
 }
 
 
-// TODO: 
-// ignore function keys
-// make the renderer render things relative to a point so that a cells text, extents, etc are all 'stuck' together
-// make i insert before text and a insert after text
-// Support keyToUpper for non alphabet characters such as $
-// Support scrolling
-// '.' doesnt work for certain input operations, i think my string handling is broken
-//
 // Done:
-// centre view
-// handle space insertions properly
-// add a gap between cells
-// only display text in cell extent
-// Escape goes to normal mode
-// BackSpace deletes text
-// add 'o' or 'O' to insert new row and 'a' or 'A' to insert new column
-// support uppercase character insertion and uppercase key actions
-// Add line numbers and column characters
-// Make '.' repeat the last command
-//
-//
-// Requirements:
-// Edit cells
-// add rows and columns
+// - fix - delete not moving selected column
+// - <count>g
+// - gg
+// - Add VIEWPORT_COLUMN_RIGHT_HALF_PAGE('E')
+// - Add VIEWPORT_COLUMN_LEFT_HALF_PAGE('B')
+// - Add VIEWPORT_COLUMN_RIGHT('e')
+// - Add VIEWPORT_COLUMN_LEFT('b')
+// - $
+// - 0
+// - l - bug fix - when at the furthest right column, do not change the selectedCell
+// - H
+// - L
+// - M
+// - VIEWPORT_HALF_PAGE_UP ('CTRL-u')
+// - VIEWPORT_HALF_PAGE_DOWN ('CTRL-d')
+// - clamp viewport for ROW_UP
+// - clamp viewport for ROW_DOWN
+// - Add VIEWPORT_PAGE_UP ('CTRL-b')
+// - Add VIEWPORT_PAGE_DOWN ('CTRL-f')
+// - Add VIEWPORT_ROW_DOWN('CTRL-e') - moves the viewport down
+// - Add VIEWPORT_ROW_UP('CTRL-y') - moves the viewport up  
+// - Use the following field to determine shift state when determining capital letters: event.xkey.state. In fact, seems that XLookupString might account for shift/caps lock state and perhaps this should be used for converting key events to a string/character. Currently, caps lock does not result in capital letters.
+// - centre view
+// - handle space insertions properly
+// - add a gap between cells
+// - only display text in cell extent
+// - Escape goes to normal mode
+// - BackSpace deletes text
+// - add 'o' or 'O' to insert new row and 'a' or 'A' to insert new column
+// - support uppercase character insertion and uppercase key actions
+// - Add line numbers and column characters
+// - Make '.' repeat the last command
 //

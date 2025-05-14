@@ -1,0 +1,23 @@
+[
+  {
+    "name": "MapIS",
+    "type_map_postfix": "IS",
+    "type_array": "DArrayMapNodeIS",
+    "type_node": "MapNodeIS",
+    "type_key": "int",
+    "type_value": "String",
+    "function_prefix_array": "dArrayMapNodeIS",
+    "comparator_function_name": "mapISKeyEquals"
+  },
+  {
+    "name": "MapSI",
+    "type_map_postfix": "SI",
+    "type_array": "DArrayMapNodeStringInt",
+    "type_node": "MapNodeStringInt",
+    "type_key": "String",
+    "type_value": "int",
+    "function_prefix_array": "dArrayMapNodeStringInt",
+    "comparator_function_name": "mapSIKeyEquals"
+  }
+]
+
