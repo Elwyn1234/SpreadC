@@ -1,0 +1,27 @@
+## Introduction 
+This application is an interface to the computer. Whilst this is the case for all computer applications, this is the sole responsibility of this application - its purpose is to improve the connection between a user and the computer. The use case of this is dependant upon your unique installation.
+
+Generally, interfacing with a computer involves three stages. The user must first decide on their intent (i.e. what they want the computer to do). The user must then express this intent to the computer. Finally, the computer acts on this intent to hopefully achieve the desired result.
+Generally, the second stage described can be very slow which creates a disconnect between the user and the computer.
+As an example, lets look at interacting with a database application to delete database records, specifically user profile records (users). Traditionally, you might expect this to involve opening a table of users, selecting the users you want to delete with the muose, and then pressing a delete button to batch delete the users. Whilst this is fast, it is only as fast as you can accurately move your mouse.
+
+This application explores another approach. Most users are able to type at least 60 words per minute where the number of possible words (the number of combinations of characters) is very large. This makes the keyboard a very fast and expressive interface to the computer.
+This application explores the idea of using the keyboard as the sole interface to the computer. Looking at the same example, the user would open a table of users by pressing 'otu' (open table user). Move the selection to the record you want by pressing e.g. '12j' (down 12 lines) and 'k' (up a line). Delete the selected user by pressing 'du' (delete user).
+Note that the example user input involves a sequence of characters, not just one character. A single command often involves a composition of individual characters where each character represents a command component which can be either a "count", "operator", "noun" or "motion". By constructing commands through composition, this enables the user to be expressive with few button presses. This also enables flexibility where e.g. one action can be applied to many nouns.
+
+There are native nouns and plugin nouns which draws the boundary between the responsibility of the application and the responsibility of the plugin. Native nouns include the rows, columns, and cells in the application table and the text in each of these cells. Plugin nouns could include database user records.
+To break down an example of a composite command, take '4drj' as an example. Here '4' is the count and represents the number of nouns to operate upon. 'd' is the operator and represents the delete operator. 'r' is the noun and represents the table row noun. 'j' is the motion and represents the down motion. Altogether, this command means delete 4 rows downward.
+This is a flexible interface because once you learn a few of the command components, you can combine them in many ways to express your intent. For example, the delete operator can be combined with most nouns to delete e.g. columns, cells, database users, etc.
+
+As mentioned earlier, people can type words (composite commands) quickly and the set of possible words is vast. This means that
+1. the composite commands are entered quickly, minimising the disconnect between user and computer.
+2. the composite commands are vast in number, making them flexible and expressive. Flexibility is important because this application can make few assumptions around the user's use case. This means that the app has to be able to meld to the needs of the user.
+
+## Plugin Architecture
+
+Whilst this application was initially intended to be a spreadsheet editor, it quickly became clear that the specific use case of the app could be very flexible instead of being tied to editing tabular data. The strengths of the application is the ability to flexibily and expressively interact with the computer. Plugins are used to enable a any specific use case. This works by the plugin configuring a mapping from command components to plugin-implemented functionality.
+
+## Application Plugins
+As part of your installation, you will install "application" plugins which will configure and implement the functionality for your use case. You can install multiple applications but only one application can be activated at any time.
+
+
