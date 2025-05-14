@@ -78,27 +78,7 @@ enum NORMAL_MODE_STATE {
 };
 
 enum NORMAL_MODE_ACTION {
-  COLUMN_LEFT = 1,
-  COLUMN_RIGHT,
-  ROW_UP,
-  ROW_DOWN,
-  SELECTED_CELL_CENTRE,
-  SELECTED_CELL_TOP,
-  SELECTED_CELL_BOTTOM,
-  SELECTED_CELL_BEGINNING,
-  SELECTED_CELL_END,
-  VIEWPORT_ROW_UP,
-  VIEWPORT_ROW_DOWN,
-  VIEWPORT_COLUMN_LEFT,
-  VIEWPORT_COLUMN_RIGHT,
-  VIEWPORT_COLUMN_LEFT_HALF_PAGE,
-  VIEWPORT_COLUMN_RIGHT_HALF_PAGE,
-  VIEWPORT_PAGE_UP,
-  VIEWPORT_PAGE_DOWN,
-  VIEWPORT_HALF_PAGE_UP,
-  VIEWPORT_HALF_PAGE_DOWN,
-  VIEWPORT_GO_TO,
-  INSERT_BEGIN,
+  INSERT_BEGIN = 1,
   INSERT_TEXT,
   APPEND_COLUMN,
   INSERT_COLUMN,
@@ -108,13 +88,32 @@ enum NORMAL_MODE_ACTION {
 };
 
 enum MOTION {
-  MTN_SHEET_TOP = 1,
+  MTN_GO_TO = 1,
+  MTN_SELECTED_CELL_END,
+  MTN_SELECTED_CELL_BEGINNING,
+  MTN_SELECTED_CELL_BOTTOM,
+  MTN_SELECTED_CELL_TOP,
+  MTN_SELECTED_CELL_CENTRE,
+  MTN_ROW_DOWN,
+  MTN_ROW_UP,
+  MTN_COLUMN_RIGHT,
+  MTN_COLUMN_LEFT,
+  MTN_SHEET_TOP,
   MTN_ROW,
   MTN_COLUMN,
-  MTN_ROW_UP,
-  MTN_ROW_DOWN,
-  MTN_COLUMN_LEFT,
-  MTN_COLUMN_RIGHT,
+};
+
+enum SCROLL {
+  SCR_ROW_DOWN = 1,
+  SCR_ROW_UP,
+  SCR_HALF_PAGE_DOWN,
+  SCR_HALF_PAGE_UP,
+  SCR_PAGE_DOWN,
+  SCR_PAGE_UP,
+  SCR_COLUMN_RIGHT,
+  SCR_COLUMN_LEFT,
+  SCR_COLUMN_RIGHT_HALF_PAGE,
+  SCR_COLUMN_LEFT_HALF_PAGE,
 };
 
 struct Action {
@@ -433,316 +432,432 @@ void sheetCellAppend(Sheet sheet, int cellIndex, char* valueToInsert, int valueT
 // NORMAL MODE ACTIONS
 ////////////////////////////////////////////////////////////////////////
 void normalModeAction(Sheet *sheet, Viewport *viewport, Action action) {
+  action.count = action.count == 0 ? 1 : action.count;
+  int rowStart;
+  int rowEnd;
+  switch (action.motion) {
+    case MTN_GO_TO: {
+      int row_x = sheet->selectedCell / sheet->rowCount;
+      int row_y = action.count;
+      if (row_x < row_y) {
+        rowStart = row_x;
+        rowEnd = row_y;
+      } else {
+        rowEnd = row_x;
+        rowStart = row_y;
+      }
+      break;
+    }
+    case MTN_COLUMN_RIGHT: {
+      break;
+    }
+    case MTN_COLUMN_LEFT: {
+      break;
+    }
+    case MTN_ROW_DOWN: {
+      rowStart = sheet->selectedCell / sheet->rowCount;
+      rowEnd = rowStart + action.count;
+      break;
+    }
+    case MTN_ROW_UP: {
+      rowEnd = sheet->selectedCell / sheet->rowCount;
+      rowStart = rowEnd - action.count;
+      break;
+    }
+    case MTN_COLUMN: {
+      break;
+    }
+    case MTN_ROW: {
+      rowStart = sheet->selectedCell / sheet->rowCount;
+      rowEnd = rowStart;
+      break;
+    }
+    case MTN_SHEET_TOP: {
+      rowEnd = sheet->selectedCell / sheet->rowCount;
+      rowStart = 0;
+      break;
+    }
+    case MTN_SELECTED_CELL_CENTRE: {
+      break;
+    }
+    case MTN_SELECTED_CELL_TOP: {
+      break;
+    }
+    case MTN_SELECTED_CELL_BOTTOM: {
+      break;
+    }
+    case MTN_SELECTED_CELL_BEGINNING: {
+      break;
+    }
+    case MTN_SELECTED_CELL_END: {
+      break;
+    }
+    default: {
+      assert(FALSE, "[Rt3F9D6i] IM GONUAEFIUAIEF");
+      break;
+    }
+  }
+
   switch (action.action) {
-    case COLUMN_LEFT: {
-      if (sheet->selectedCell % sheet->columnCount > 0)
-        sheet->selectedCell -= 1;
-      break;
-    }
-    case ROW_DOWN: {
-      if (sheet->selectedCell / sheet->columnCount >= sheet->rowCount - 1)
-        break;
-
-      PangoLayout *layout = initialisePangoLayout(program);
-      int textHeightPixels = calculateTextHeightPixels(layout);
-      int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);
-      XWindowAttributes winAttribs = {0};
-      XGetWindowAttributes(program.display, program.window, &winAttribs);
-      int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
-
-      sheet->selectedCell += sheet->columnCount;
-      int selectedRow = sheet->selectedCell / sheet->columnCount;
-      // selectedToAnchor is the range from the selectedRow to the anchorRow. We add one to this because the range is inclusive
-      int selectedToAnchor = selectedRow - viewport->anchorRow + 1;
-      if (selectedToAnchor > maxRowsOnScreen) {
-        viewport->anchorRow ++;
+    case DELETE_ROW: {
+      printf("[DEBUG] Entering DELETE_ROW\n");
+      for (int i = rowStart; i <= rowEnd; i++) {
+        if (sheet->rowCount <= 0) break;
+        sheetDeleteRow(sheet, i * sheet->columnCount);
       }
+      
+      // TODO FIX ME
+      /*if (sheet->selectedCell >= sheet->columnCount * sheet->rowCount) {*/
+      /*  Action action = {0};*/
+      /*  action.action = ROW_UP;*/
+      /*  normalModeAction(sheet, viewport, action);*/
+      /*}*/
       break;
     }
-    case ROW_UP: {
-      if (sheet->selectedCell / sheet->columnCount == 0)
-        break;
-      sheet->selectedCell -= sheet->columnCount;
-      int selectedRow = sheet->selectedCell / sheet->columnCount;
-      if (viewport->anchorRow > selectedRow) {
-        viewport->anchorRow --;
+
+
+
+    case INSERT_ROW: {
+      printf("[DEBUG] Entering INSERT_ROW\n");
+      for (int i = rowStart; i <= rowEnd; i++) {
+        sheetAppendRow(sheet, sheet->selectedCell);
       }
-      break;
-    }
-    case COLUMN_RIGHT: {
-      if (sheet->selectedCell % sheet->columnCount < sheet->columnCount - 1)
-        sheet->selectedCell += 1;
-      break;
-    }
-    case SELECTED_CELL_CENTRE: {
-      PangoLayout *layout = initialisePangoLayout(program);
-      int textHeightPixels = calculateTextHeightPixels(layout);
-      int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);
-      XWindowAttributes winAttribs = {0};
-      XGetWindowAttributes(program.display, program.window, &winAttribs);
-      int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
-
-      /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/
-      int topmostRow = viewport->anchorRow;
-      sheet->selectedCell = topmostRow * sheet->columnCount + maxRowsOnScreen / 2 * sheet->columnCount + sheet->selectedCell % sheet->columnCount;
-      break;
-    }
-    case SELECTED_CELL_TOP: {
-      /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/
-      int topmostRow = viewport->anchorRow;
-      int columnShift = sheet->selectedCell % sheet->columnCount;
-      sheet->selectedCell = topmostRow * sheet->columnCount + columnShift;
-      break;
-    }
-    case SELECTED_CELL_BOTTOM: {
-      PangoLayout *layout = initialisePangoLayout(program);
-      int textHeightPixels = calculateTextHeightPixels(layout);
-      int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);
-      XWindowAttributes winAttribs = {0};
-      XGetWindowAttributes(program.display, program.window, &winAttribs);
-      int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
-
-      /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/
-      int topmostRow = viewport->anchorRow;
-      int rowShift = maxRowsOnScreen * sheet->columnCount - sheet->columnCount;
-      int columnShift = sheet->selectedCell % sheet->columnCount;
-      sheet->selectedCell = topmostRow * sheet->columnCount + rowShift + columnShift;
-      break;
-    }
-    case SELECTED_CELL_BEGINNING: {
-      sheet->selectedCell -= sheet->selectedCell % sheet->columnCount;
-      break;
-    }
-    case SELECTED_CELL_END: {
-      sheet->selectedCell += sheet->columnCount - 1 - sheet->selectedCell % sheet->columnCount;
-      break;
-    }
-    case VIEWPORT_ROW_UP: {
-      viewport->anchorRow --;
-      break;
-    }
-    case VIEWPORT_ROW_DOWN: {
-      viewport->anchorRow ++;
-      break;
-    }
-    case VIEWPORT_COLUMN_RIGHT: {
-      viewport->anchorColumn ++;
-      break;
-    }
-    case VIEWPORT_COLUMN_LEFT: {
-      viewport->anchorColumn --;
-      break;
-    }
-    case VIEWPORT_COLUMN_LEFT_HALF_PAGE: {
-      PangoLayout *layout = initialisePangoLayout(program);
-      int textWidthPixels = calculateTextWidthPixels(layout);
-      int cellWidthPixels = calculateCellWidthPixels(textWidthPixels, *sheet);
-      XWindowAttributes winAttribs = {0};
-      XGetWindowAttributes(program.display, program.window, &winAttribs);
-      int maxColumnsOnScreen = calculateMaxColumnsOnScreen(winAttribs, cellWidthPixels);
-
-      viewport->anchorColumn -= maxColumnsOnScreen / 2;
-
-      int selectedColumn = viewport->anchorColumn + maxColumnsOnScreen - 1;
-      selectedColumn = clamp(selectedColumn, 0, sheet->columnCount);
-      int selectedRow = sheet->selectedCell / sheet->columnCount;
-      sheet->selectedCell = selectedRow * sheet->columnCount + selectedColumn;
-
-      break;
-    }
-    case VIEWPORT_COLUMN_RIGHT_HALF_PAGE: {
-      PangoLayout *layout = initialisePangoLayout(program);
-      int textWidthPixels = calculateTextWidthPixels(layout);
-      int cellWidthPixels = calculateCellWidthPixels(textWidthPixels, *sheet);
-      XWindowAttributes winAttribs = {0};
-      XGetWindowAttributes(program.display, program.window, &winAttribs);
-      int maxColumnsOnScreen = calculateMaxColumnsOnScreen(winAttribs, cellWidthPixels);
-
-      viewport->anchorColumn += maxColumnsOnScreen / 2;
-
-      int selectedColumn = viewport->anchorColumn;
-      selectedColumn = clamp(selectedColumn, 0, sheet->columnCount);
-      int selectedRow = sheet->selectedCell / sheet->columnCount;
-      sheet->selectedCell = selectedRow * sheet->columnCount + selectedColumn;
-
-      break;
-    }
-    case VIEWPORT_PAGE_UP: {
-      PangoLayout *layout = initialisePangoLayout(program);
-      int textHeightPixels = calculateTextHeightPixels(layout);
-      int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);
-      XWindowAttributes winAttribs = {0};
-      XGetWindowAttributes(program.display, program.window, &winAttribs);
-      int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
-      viewport->anchorRow -= maxRowsOnScreen;
-
-      int rowShift = maxRowsOnScreen * sheet->columnCount - sheet->columnCount;
-      int columnShift = sheet->selectedCell % sheet->columnCount;
-      /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/
-      int topmostRow = viewport->anchorRow;
-      sheet->selectedCell = topmostRow * sheet->columnCount + rowShift + columnShift;
-      break;
-    }
-    case VIEWPORT_PAGE_DOWN: {
-      PangoLayout *layout = initialisePangoLayout(program);
-      int textHeightPixels = calculateTextHeightPixels(layout);
-      int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);
-      XWindowAttributes winAttribs = {0};
-      XGetWindowAttributes(program.display, program.window, &winAttribs);
-      int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
-      viewport->anchorRow += maxRowsOnScreen;
-
-      /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/
-      int topmostRow = viewport->anchorRow;
-      sheet->selectedCell = topmostRow * sheet->columnCount + sheet->selectedCell % sheet->columnCount;
-      break;
-    }
-    case VIEWPORT_HALF_PAGE_UP: {
-      PangoLayout *layout = initialisePangoLayout(program);
-      int textHeightPixels = calculateTextHeightPixels(layout);
-      int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);
-      XWindowAttributes winAttribs = {0};
-      XGetWindowAttributes(program.display, program.window, &winAttribs);
-      int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
-
-      viewport->anchorRow -= maxRowsOnScreen / 2;
-      if (maxRowsOnScreen % 2 == 1) {
-        viewport->anchorRow --;
-      }
-
-      int selectedRow = sheet->selectedCell / sheet->columnCount;
-      // selectedToAnchor is the range from the selectedRow to the anchorRow. We add one to this because the range is inclusive
-      int selectedToAnchor = selectedRow - viewport->anchorRow + 1;
-      if (selectedToAnchor > maxRowsOnScreen) {
-        int rowShift = maxRowsOnScreen * sheet->columnCount - sheet->columnCount;
-        int columnShift = sheet->selectedCell % sheet->columnCount;
-        /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/
-        int topmostRow = viewport->anchorRow;
-        sheet->selectedCell = topmostRow * sheet->columnCount + rowShift + columnShift;
-      }
-
-      break;
-    }
-    case VIEWPORT_HALF_PAGE_DOWN: {
-      PangoLayout *layout = initialisePangoLayout(program);
-      int textHeightPixels = calculateTextHeightPixels(layout);
-      int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);
-      XWindowAttributes winAttribs = {0};
-      XGetWindowAttributes(program.display, program.window, &winAttribs);
-      int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
-
-      viewport->anchorRow += maxRowsOnScreen / 2;
-      if (maxRowsOnScreen % 2 == 1) {
-        viewport->anchorRow ++;
-      }
-
-      int selectedRow = sheet->selectedCell / sheet->columnCount;
-      if (viewport->anchorRow > selectedRow) {
-        /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/
-        int topmostRow = viewport->anchorRow;
-        sheet->selectedCell = topmostRow * sheet->columnCount + sheet->selectedCell % sheet->columnCount;
-      }
-      break;
-    }
-    case VIEWPORT_GO_TO: {
-      PangoLayout *layout = initialisePangoLayout(program);
-      int textHeightPixels = calculateTextHeightPixels(layout);
-      int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);
-      XWindowAttributes winAttribs = {0};
-      XGetWindowAttributes(program.display, program.window, &winAttribs);
-      int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);
-
-      switch (action.motion) {
-        case MTN_SHEET_TOP: {
-          sheet->selectedCell = sheet->selectedCell % sheet->columnCount;
-          viewport->anchorRow = clampToValue(viewport->anchorRow, -maxRowsOnScreen, 0, 0);
-          break;
-        }
-        default: {
-          break;
-          assert(FALSE, "[aL9dsKLE] action.motion should never hit this");
-        }
-      }
-      if (action.motion == 0) {
-        assert_gt_int(action.count, 0, "[ckm+lVnh] action.count is not gt 0");
-        int oneBasedRowIndex = action.count - 1;
-        int columnShift = sheet->selectedCell % sheet->columnCount;
-        sheet->selectedCell = oneBasedRowIndex * sheet->columnCount + columnShift;
-        viewport->anchorRow = clampToValue(viewport->anchorRow, oneBasedRowIndex - maxRowsOnScreen + 1, oneBasedRowIndex, oneBasedRowIndex - maxRowsOnScreen / 2);
-        viewport->anchorRow = clamp(viewport->anchorRow, 0, INT_MAX);
-      }
-
-      break;
-    }
-    case INSERT_BEGIN: {
-      sheet->insertMode = TRUE;
-      // INSERT MODE AT THE START OF THE STRING. Maybe ii does this, i puts you in "normal text mode" as opposed to "normal sheet mode"
-      break;
-    }
-    case INSERT_TEXT:
-      sheetCellAppend(*sheet, sheet->selectedCell, action.text.value, action.text.length);
-      break;
-    /* case 'I': { */
-    /*   sheet->insertMode = TRUE; */
-    /*   // INSERT MODE AT THE END OF THE STRING */
-    /*   break; */
-    /* } */
-    case APPEND_COLUMN: {
-      sheetAppendColumn(sheet, sheet->selectedCell + 1);
-      int selectedRow = sheet->selectedCell / (sheet->columnCount - 1);
-      sheet->selectedCell += selectedRow + 1; // sheetAppendColumn will add insert a cell for each row
-      break;
-    }
-    case INSERT_COLUMN: {
-      // INSERT NEW COLUMN
-      sheetAppendColumn(sheet, sheet->selectedCell);
-      int selectedRow = sheet->selectedCell / (sheet->columnCount - 1);
-      sheet->selectedCell += selectedRow; // sheetAppendColumn will add insert a cell for each row
       break;
     }
     case APPEND_ROW: {
-      sheetAppendRow(sheet, sheet->selectedCell + sheet->columnCount);
-      Action action = {0};
-      action.action = ROW_DOWN;
-      action.count = 1;
-      normalModeAction(sheet, viewport, action);
-      break;
-    }
-    case INSERT_ROW: {
-      sheetAppendRow(sheet, sheet->selectedCell);
-      break;
-    }
-    case DELETE_ROW: {
-      if (sheet->rowCount > 0)
-        sheetDeleteRow(sheet, sheet->selectedCell);
-      if (sheet->selectedCell >= sheet->columnCount * sheet->rowCount) {
-        Action action = {0};
-        action.action = ROW_UP;
-        normalModeAction(sheet, viewport, action);
+      printf("[DEBUG] Entering APPEND_ROW\n");
+      for (int i = rowStart; i <= rowEnd; i++) {
+        sheetAppendRow(sheet, sheet->selectedCell + sheet->columnCount);
+    /*    Action action = {0};*/
+    /*    action.action = ROW_DOWN;*/
+    /*    action.count = 1;*/
+    /*    normalModeAction(sheet, viewport, action);*/
       }
       break;
     }
-    /* case '$': { // TODO */
-    /*   sheetAppendRow(&sheet, sheet->selectedCell); */
-    /*   break; */
-    /* } */
-    /* case 'e': { // TODO */
-    /*   sheetAppendRow(&sheet, sheet->selectedCell); */
-    /*   break; */
-    /* } */
-    /* case 'Input.CTRL_E': { // TODO */
-    /*   sheetAppendRow(&sheet, sheet->selectedCell); */
-    /*   break; */
-    /* } */
-    /* case 'y???': { // TODO */
-    /*   sheetAppendRow(&sheet, sheet->selectedCell); */
-    /*   break; */
-    /* } */
-    /* case 'Input.CTRL_Y': { // TODO */
-    /*   sheetAppendRow(&sheet, sheet->selectedCell); */
-    /*   break; */
-    /* } */
+    case INSERT_COLUMN: {
+      printf("[DEBUG] Entering INSERT_COLUMN\n");
+      break;
+    }
+    case APPEND_COLUMN: {
+      printf("[DEBUG] Entering APPEND_COLUMN\n");
+      break;
+    }
+    case INSERT_TEXT: {
+      printf("[DEBUG] Entering INSERT_TEXT\n");
+      break;
+    }
+    case INSERT_BEGIN: {
+      printf("[DEBUG] Entering INSERT_BEGIN\n");
+      break;
+    }
+    default: {
+      assert(FALSE, "[Rt3F9D6h] IM GONUAEFIUAIEF");
+      break;
+    }
   }
+
+
+  /*switch (action.action) {*/
+  /*  case COLUMN_LEFT: {*/
+  /*    if (sheet->selectedCell % sheet->columnCount > 0)*/
+  /*      sheet->selectedCell -= 1;*/
+  /*    break;*/
+  /*  }*/
+  /*  case ROW_DOWN: {*/
+  /*    if (sheet->selectedCell / sheet->columnCount >= sheet->rowCount - 1)*/
+  /*      break;*/
+  /**/
+  /*    PangoLayout *layout = initialisePangoLayout(program);*/
+  /*    int textHeightPixels = calculateTextHeightPixels(layout);*/
+  /*    int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);*/
+  /*    XWindowAttributes winAttribs = {0};*/
+  /*    XGetWindowAttributes(program.display, program.window, &winAttribs);*/
+  /*    int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);*/
+  /**/
+  /*    sheet->selectedCell += sheet->columnCount;*/
+  /*    int selectedRow = sheet->selectedCell / sheet->columnCount;*/
+  /*    // selectedToAnchor is the range from the selectedRow to the anchorRow. We add one to this because the range is inclusive*/
+  /*    int selectedToAnchor = selectedRow - viewport->anchorRow + 1;*/
+  /*    if (selectedToAnchor > maxRowsOnScreen) {*/
+  /*      viewport->anchorRow ++;*/
+  /*    }*/
+  /*    break;*/
+  /*  }*/
+  /*  case ROW_UP: {*/
+  /*    if (sheet->selectedCell / sheet->columnCount == 0)*/
+  /*      break;*/
+  /*    sheet->selectedCell -= sheet->columnCount;*/
+  /*    int selectedRow = sheet->selectedCell / sheet->columnCount;*/
+  /*    if (viewport->anchorRow > selectedRow) {*/
+  /*      viewport->anchorRow --;*/
+  /*    }*/
+  /*    break;*/
+  /*  }*/
+  /*  case COLUMN_RIGHT: {*/
+  /*    if (sheet->selectedCell % sheet->columnCount < sheet->columnCount - 1)*/
+  /*      sheet->selectedCell += 1;*/
+  /*    break;*/
+  /*  }*/
+  /*  case SELECTED_CELL_CENTRE: {*/
+  /*    PangoLayout *layout = initialisePangoLayout(program);*/
+  /*    int textHeightPixels = calculateTextHeightPixels(layout);*/
+  /*    int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);*/
+  /*    XWindowAttributes winAttribs = {0};*/
+  /*    XGetWindowAttributes(program.display, program.window, &winAttribs);*/
+  /*    int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);*/
+  /**/
+  //    /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/*/
+  /*    int topmostRow = viewport->anchorRow;*/
+  /*    sheet->selectedCell = topmostRow * sheet->columnCount + maxRowsOnScreen / 2 * sheet->columnCount + sheet->selectedCell % sheet->columnCount;*/
+  /*    break;*/
+  /*  }*/
+  /*  case SELECTED_CELL_TOP: {*/
+  //    /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/*/
+  /*    int topmostRow = viewport->anchorRow;*/
+  /*    int columnShift = sheet->selectedCell % sheet->columnCount;*/
+  /*    sheet->selectedCell = topmostRow * sheet->columnCount + columnShift;*/
+  /*    break;*/
+  /*  }*/
+  /*  case SELECTED_CELL_BOTTOM: {*/
+  /*    PangoLayout *layout = initialisePangoLayout(program);*/
+  /*    int textHeightPixels = calculateTextHeightPixels(layout);*/
+  /*    int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);*/
+  /*    XWindowAttributes winAttribs = {0};*/
+  /*    XGetWindowAttributes(program.display, program.window, &winAttribs);*/
+  /*    int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);*/
+  /**/
+  //    /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/*/
+  /*    int topmostRow = viewport->anchorRow;*/
+  /*    int rowShift = maxRowsOnScreen * sheet->columnCount - sheet->columnCount;*/
+  /*    int columnShift = sheet->selectedCell % sheet->columnCount;*/
+  /*    sheet->selectedCell = topmostRow * sheet->columnCount + rowShift + columnShift;*/
+  /*    break;*/
+  /*  }*/
+  /*  case SELECTED_CELL_BEGINNING: {*/
+  /*    sheet->selectedCell -= sheet->selectedCell % sheet->columnCount;*/
+  /*    break;*/
+  /*  }*/
+  /*  case SELECTED_CELL_END: {*/
+  /*    sheet->selectedCell += sheet->columnCount - 1 - sheet->selectedCell % sheet->columnCount;*/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_ROW_UP: {*/
+  /*    viewport->anchorRow --;*/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_ROW_DOWN: {*/
+  /*    viewport->anchorRow ++;*/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_COLUMN_RIGHT: {*/
+  /*    viewport->anchorColumn ++;*/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_COLUMN_LEFT: {*/
+  /*    viewport->anchorColumn --;*/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_COLUMN_LEFT_HALF_PAGE: {*/
+  /*    PangoLayout *layout = initialisePangoLayout(program);*/
+  /*    int textWidthPixels = calculateTextWidthPixels(layout);*/
+  /*    int cellWidthPixels = calculateCellWidthPixels(textWidthPixels, *sheet);*/
+  /*    XWindowAttributes winAttribs = {0};*/
+  /*    XGetWindowAttributes(program.display, program.window, &winAttribs);*/
+  /*    int maxColumnsOnScreen = calculateMaxColumnsOnScreen(winAttribs, cellWidthPixels);*/
+  /**/
+  /*    viewport->anchorColumn -= maxColumnsOnScreen / 2;*/
+  /**/
+  /*    int selectedColumn = viewport->anchorColumn + maxColumnsOnScreen - 1;*/
+  /*    selectedColumn = clamp(selectedColumn, 0, sheet->columnCount);*/
+  /*    int selectedRow = sheet->selectedCell / sheet->columnCount;*/
+  /*    sheet->selectedCell = selectedRow * sheet->columnCount + selectedColumn;*/
+  /**/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_COLUMN_RIGHT_HALF_PAGE: {*/
+  /*    PangoLayout *layout = initialisePangoLayout(program);*/
+  /*    int textWidthPixels = calculateTextWidthPixels(layout);*/
+  /*    int cellWidthPixels = calculateCellWidthPixels(textWidthPixels, *sheet);*/
+  /*    XWindowAttributes winAttribs = {0};*/
+  /*    XGetWindowAttributes(program.display, program.window, &winAttribs);*/
+  /*    int maxColumnsOnScreen = calculateMaxColumnsOnScreen(winAttribs, cellWidthPixels);*/
+  /**/
+  /*    viewport->anchorColumn += maxColumnsOnScreen / 2;*/
+  /**/
+  /*    int selectedColumn = viewport->anchorColumn;*/
+  /*    selectedColumn = clamp(selectedColumn, 0, sheet->columnCount);*/
+  /*    int selectedRow = sheet->selectedCell / sheet->columnCount;*/
+  /*    sheet->selectedCell = selectedRow * sheet->columnCount + selectedColumn;*/
+  /**/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_PAGE_UP: {*/
+  /*    PangoLayout *layout = initialisePangoLayout(program);*/
+  /*    int textHeightPixels = calculateTextHeightPixels(layout);*/
+  /*    int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);*/
+  /*    XWindowAttributes winAttribs = {0};*/
+  /*    XGetWindowAttributes(program.display, program.window, &winAttribs);*/
+  /*    int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);*/
+  /*    viewport->anchorRow -= maxRowsOnScreen;*/
+  /**/
+  /*    int rowShift = maxRowsOnScreen * sheet->columnCount - sheet->columnCount;*/
+  /*    int columnShift = sheet->selectedCell % sheet->columnCount;*/
+  //    /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/*/
+  /*    int topmostRow = viewport->anchorRow;*/
+  /*    sheet->selectedCell = topmostRow * sheet->columnCount + rowShift + columnShift;*/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_PAGE_DOWN: {*/
+  /*    PangoLayout *layout = initialisePangoLayout(program);*/
+  /*    int textHeightPixels = calculateTextHeightPixels(layout);*/
+  /*    int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);*/
+  /*    XWindowAttributes winAttribs = {0};*/
+  /*    XGetWindowAttributes(program.display, program.window, &winAttribs);*/
+  /*    int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);*/
+  /*    viewport->anchorRow += maxRowsOnScreen;*/
+  /**/
+  //    /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/*/
+  /*    int topmostRow = viewport->anchorRow;*/
+  /*    sheet->selectedCell = topmostRow * sheet->columnCount + sheet->selectedCell % sheet->columnCount;*/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_HALF_PAGE_UP: {*/
+  /*    PangoLayout *layout = initialisePangoLayout(program);*/
+  /*    int textHeightPixels = calculateTextHeightPixels(layout);*/
+  /*    int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);*/
+  /*    XWindowAttributes winAttribs = {0};*/
+  /*    XGetWindowAttributes(program.display, program.window, &winAttribs);*/
+  /*    int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);*/
+  /**/
+  /*    viewport->anchorRow -= maxRowsOnScreen / 2;*/
+  /*    if (maxRowsOnScreen % 2 == 1) {*/
+  /*      viewport->anchorRow --;*/
+  /*    }*/
+  /**/
+  /*    int selectedRow = sheet->selectedCell / sheet->columnCount;*/
+  /*    // selectedToAnchor is the range from the selectedRow to the anchorRow. We add one to this because the range is inclusive*/
+  /*    int selectedToAnchor = selectedRow - viewport->anchorRow + 1;*/
+  /*    if (selectedToAnchor > maxRowsOnScreen) {*/
+  /*      int rowShift = maxRowsOnScreen * sheet->columnCount - sheet->columnCount;*/
+  /*      int columnShift = sheet->selectedCell % sheet->columnCount;*/
+  //      /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/*/
+  /*      int topmostRow = viewport->anchorRow;*/
+  /*      sheet->selectedCell = topmostRow * sheet->columnCount + rowShift + columnShift;*/
+  /*    }*/
+  /**/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_HALF_PAGE_DOWN: {*/
+  /*    PangoLayout *layout = initialisePangoLayout(program);*/
+  /*    int textHeightPixels = calculateTextHeightPixels(layout);*/
+  /*    int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);*/
+  /*    XWindowAttributes winAttribs = {0};*/
+  /*    XGetWindowAttributes(program.display, program.window, &winAttribs);*/
+  /*    int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);*/
+  /**/
+  /*    viewport->anchorRow += maxRowsOnScreen / 2;*/
+  /*    if (maxRowsOnScreen % 2 == 1) {*/
+  /*      viewport->anchorRow ++;*/
+  /*    }*/
+  /**/
+  /*    int selectedRow = sheet->selectedCell / sheet->columnCount;*/
+  /*    if (viewport->anchorRow > selectedRow) {*/
+  //      /*int topmostRow = clamp(viewport->anchorRow, 0, sheet->rowCount);*/*/
+  /*      int topmostRow = viewport->anchorRow;*/
+  /*      sheet->selectedCell = topmostRow * sheet->columnCount + sheet->selectedCell % sheet->columnCount;*/
+  /*    }*/
+  /*    break;*/
+  /*  }*/
+  /*  case VIEWPORT_GO_TO: {*/
+  /*    PangoLayout *layout = initialisePangoLayout(program);*/
+  /*    int textHeightPixels = calculateTextHeightPixels(layout);*/
+  /*    int cellHeightPixels = calculateCellHeightPixels(textHeightPixels, *sheet);*/
+  /*    XWindowAttributes winAttribs = {0};*/
+  /*    XGetWindowAttributes(program.display, program.window, &winAttribs);*/
+  /*    int maxRowsOnScreen = calculateMaxRowsOnScreen(winAttribs, cellHeightPixels);*/
+  /**/
+  /*    switch (action.motion) {*/
+  /*      case MTN_SHEET_TOP: {*/
+  /*        sheet->selectedCell = sheet->selectedCell % sheet->columnCount;*/
+  /*        viewport->anchorRow = clampToValue(viewport->anchorRow, -maxRowsOnScreen, 0, 0);*/
+  /*        break;*/
+  /*      }*/
+  /*      default: {*/
+  /*        break;*/
+  /*        assert(FALSE, "[aL9dsKLE] action.motion should never hit this");*/
+  /*      }*/
+  /*    }*/
+  /*    if (action.motion == 0) {*/
+  /*      assert_gt_int(action.count, 0, "[ckm+lVnh] action.count is not gt 0");*/
+  /*      int oneBasedRowIndex = action.count - 1;*/
+  /*      int columnShift = sheet->selectedCell % sheet->columnCount;*/
+  /*      sheet->selectedCell = oneBasedRowIndex * sheet->columnCount + columnShift;*/
+  /*      viewport->anchorRow = clampToValue(viewport->anchorRow, oneBasedRowIndex - maxRowsOnScreen + 1, oneBasedRowIndex, oneBasedRowIndex - maxRowsOnScreen / 2);*/
+  /*      viewport->anchorRow = clamp(viewport->anchorRow, 0, INT_MAX);*/
+  /*    }*/
+  /**/
+  /*    break;*/
+  /*  }*/
+  /*  case INSERT_BEGIN: {*/
+  /*    sheet->insertMode = TRUE;*/
+  /*    // INSERT MODE AT THE START OF THE STRING. Maybe ii does this, i puts you in "normal text mode" as opposed to "normal sheet mode"*/
+  /*    break;*/
+  /*  }*/
+  /*  case INSERT_TEXT:*/
+  /*    sheetCellAppend(*sheet, sheet->selectedCell, action.text.value, action.text.length);*/
+  /*    break;*/
+  //  /* case 'I': { */*/
+  //  /*   sheet->insertMode = TRUE; */*/
+  //  /*   // INSERT MODE AT THE END OF THE STRING */*/
+  //  /*   break; */*/
+  //  /* } */*/
+  /*  case APPEND_COLUMN: {*/
+  /*    sheetAppendColumn(sheet, sheet->selectedCell + 1);*/
+  /*    int selectedRow = sheet->selectedCell / (sheet->columnCount - 1);*/
+  /*    sheet->selectedCell += selectedRow + 1; // sheetAppendColumn will add insert a cell for each row*/
+  /*    break;*/
+  /*  }*/
+  /*  case INSERT_COLUMN: {*/
+  /*    // INSERT NEW COLUMN*/
+  /*    sheetAppendColumn(sheet, sheet->selectedCell);*/
+  /*    int selectedRow = sheet->selectedCell / (sheet->columnCount - 1);*/
+  /*    sheet->selectedCell += selectedRow; // sheetAppendColumn will add insert a cell for each row*/
+  /*    break;*/
+  /*  }*/
+  /*  case APPEND_ROW: {*/
+  /*    sheetAppendRow(sheet, sheet->selectedCell + sheet->columnCount);*/
+  /*    Action action = {0};*/
+  /*    action.action = ROW_DOWN;*/
+  /*    action.count = 1;*/
+  /*    normalModeAction(sheet, viewport, action);*/
+  /*    break;*/
+  /*  }*/
+  /*  case INSERT_ROW: {*/
+  /*    sheetAppendRow(sheet, sheet->selectedCell);*/
+  /*    break;*/
+  /*  }*/
+  //  /* case '$': { // TODO */*/
+  //  /*   sheetAppendRow(&sheet, sheet->selectedCell); */*/
+  //  /*   break; */*/
+  //  /* } */*/
+  //  /* case 'e': { // TODO */*/
+  //  /*   sheetAppendRow(&sheet, sheet->selectedCell); */*/
+  //  /*   break; */*/
+  //  /* } */*/
+  //  /* case 'Input.CTRL_E': { // TODO */*/
+  //  /*   sheetAppendRow(&sheet, sheet->selectedCell); */*/
+  //  /*   break; */*/
+  //  /* } */*/
+  //  /* case 'y???': { // TODO */*/
+  //  /*   sheetAppendRow(&sheet, sheet->selectedCell); */*/
+  //  /*   break; */*/
+  //  /* } */*/
+  //  /* case 'Input.CTRL_Y': { // TODO */*/
+  //  /*   sheetAppendRow(&sheet, sheet->selectedCell); */*/
+  //  /*   break; */*/
+  //  /* } */*/
+  /*}*/
 }
 
 void commitAction(Sheet *sheet, Viewport *viewport, Action action) {
@@ -979,7 +1094,7 @@ assert_zeroed((void*) &program.currentAction.text, sizeof(program.currentAction.
 return TRUE;
 }
 
-void handleKeyPress(XEvent event, Sheet *sheet, Viewport *viewport, MapSI mapCount, MapSI mapAction, MapSI mapMotion, MapIS mapCtrlAction) {
+void handleKeyPress(XEvent event, Sheet *sheet, Viewport *viewport, MapSI mapCount, MapSI mapAction, MapSI mapMotion, MapIS mapCtrlScroll) {
   KeySym keySymPressed = XLookupKeysym(&event.xkey, 0);
   char *translatedCharArray = calloc(100, sizeof(char));
   int translatedCharLength = XLookupString(&event.xkey, translatedCharArray, 100, NULL, NULL);
@@ -1052,7 +1167,7 @@ void handleKeyPress(XEvent event, Sheet *sheet, Viewport *viewport, MapSI mapCou
       nms = NMS_ACTION;
       if (event.xkey.state & ControlMask) {
         char success;
-        translatedString = mapISLookup(&mapCtrlAction, keySymPressed, &success);
+        translatedString = mapISLookup(&mapCtrlScroll, keySymPressed, &success);
         if (!success) {
           printf("[WARNING] Unrecognised Ctrl key press: %lX\n", keySymPressed);
           program.currentAction = emptyAction;
@@ -1064,6 +1179,7 @@ void handleKeyPress(XEvent event, Sheet *sheet, Viewport *viewport, MapSI mapCou
     if (validInput) {
       switch (nms) {
         case NMS_COUNT: {
+          printf("[DEBUG] Interpreting user input as count\n");
           char success;
           int count = mapSILookup(&mapCount, translatedString, &success);
           if (success) {
@@ -1071,23 +1187,27 @@ void handleKeyPress(XEvent event, Sheet *sheet, Viewport *viewport, MapSI mapCou
           }
           else {
             program.currentAction = emptyAction;
+            assert(FALSE, "[0LjluZvj] lookup on mapCount should never fail here");
           }
           break;
         }
         case NMS_ACTION: {
+          printf("[DEBUG] Interpreting user input as action\n");
           char success;
           NORMAL_MODE_ACTION action = mapSILookup(&mapAction, translatedString, &success);
           if (success) {
             program.currentAction.action = action;
-            commitAction(sheet, viewport, program.currentAction);
+            /*commitAction(sheet, viewport, program.currentAction);*/
           }
           else {
             program.currentAction.action = action;
             program.currentAction = emptyAction;
+            printf("[INFO] User entered unsupported input key (action): %s\n", stringToNativeTerminated(translatedString));
           }
           break;
         }
         case NMS_MOTION: {
+          printf("[DEBUG] Interpreting user input as motion\n");
           char success;
           MOTION motion = mapSILookup(&mapMotion, translatedString, &success);
           if (success) {
@@ -1096,6 +1216,7 @@ void handleKeyPress(XEvent event, Sheet *sheet, Viewport *viewport, MapSI mapCou
           }
           else {
             program.currentAction = emptyAction;
+            printf("[INFO] User entered unsupported input key (motion): %s\n", stringToNativeTerminated(translatedString));
           }
           break;
         }
@@ -1350,8 +1471,8 @@ int main() {
 
   inputCharacter.value = "g";
   mapSIInsert(&mapMotion, inputCharacter, MTN_SHEET_TOP);
-  inputCharacter.value = "d";
-  mapSIInsert(&mapMotion, inputCharacter, MTN_ROW);
+  /*inputCharacter.value = "d";*/
+  /*mapSIInsert(&mapMotion, inputCharacter, MTN_ROW);*/
   inputCharacter.value = "y";
   mapSIInsert(&mapMotion, inputCharacter, MTN_ROW);
   inputCharacter.value = "c";
@@ -1366,80 +1487,102 @@ int main() {
   inputCharacter.value = "l";
   mapSIInsert(&mapMotion, inputCharacter, MTN_COLUMN_RIGHT);
 
+  inputCharacter.value = "h";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_COLUMN_LEFT);
+  inputCharacter.value = "l";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_COLUMN_RIGHT);
+  inputCharacter.value = "k";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_ROW_UP);
+  inputCharacter.value = "j";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_ROW_DOWN);
+  inputCharacter.value = "M";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_SELECTED_CELL_CENTRE);
+  inputCharacter.value = "H";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_SELECTED_CELL_TOP);
+  inputCharacter.value = "L";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_SELECTED_CELL_BOTTOM);
+  inputCharacter.value = "0";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_SELECTED_CELL_BEGINNING);
+  inputCharacter.value = "$";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_SELECTED_CELL_END);
+  inputCharacter.value = "g";
+  mapSIInsert(&mapMotion, inputCharacter, MTN_GO_TO);
 
 
-  MapIS mapCtrlAction = mapISNew(100);
+
+  MapIS mapCtrlScroll = mapISNew(100);
   {
     String x;
-    x.value = "VIEWPORT_ROW_UP";
+    x.value = "SCR_ROW_UP";
     x.length = 15;
-    mapISInsert(&mapCtrlAction, XK_y, x);
+    mapISInsert(&mapCtrlScroll, XK_y, x);
 
-    x.value = "VIEWPORT_ROW_DOWN";
+    x.value = "SCR_ROW_DOWN";
     x.length = 17;
-    mapISInsert(&mapCtrlAction, XK_e, x);
+    mapISInsert(&mapCtrlScroll, XK_e, x);
 
-    x.value = "VIEWPORT_PAGE_UP";
+    x.value = "SCR_PAGE_UP";
     x.length = 16;
-    mapISInsert(&mapCtrlAction, XK_b, x);
+    mapISInsert(&mapCtrlScroll, XK_b, x);
 
-    x.value = "VIEWPORT_PAGE_DOWN";
+    x.value = "SCR_PAGE_DOWN";
     x.length = 18;
-    mapISInsert(&mapCtrlAction, XK_f, x);
+    mapISInsert(&mapCtrlScroll, XK_f, x);
 
-    x.value = "VIEWPORT_HALF_PAGE_UP";
+    x.value = "SCR_HALF_PAGE_UP";
     x.length = 21;
-    mapISInsert(&mapCtrlAction, XK_u, x);
+    mapISInsert(&mapCtrlScroll, XK_u, x);
 
-    x.value = "VIEWPORT_HALF_PAGE_DOWN";
+    x.value = "SCR_HALF_PAGE_DOWN";
     x.length = 23;
-    mapISInsert(&mapCtrlAction, XK_d, x);
+    mapISInsert(&mapCtrlScroll, XK_d, x);
+  }
+
+  MapSI mapScroll = mapSINew(100);
+  {
+    String x;
+    x.value = "SCR_ROW_UP";
+    x.length = 15;
+    mapSIInsert(&mapScroll, x, SCR_ROW_UP);
+
+    x.value = "SCR_ROW_DOWN";
+    x.length = 17;
+    mapSIInsert(&mapScroll, x, SCR_ROW_DOWN);
+
+    x.value = "SCR_PAGE_UP";
+    x.length = 16;
+    mapSIInsert(&mapScroll, x, SCR_PAGE_UP);
+
+    x.value = "SCR_PAGE_DOWN";
+    x.length = 18;
+    mapSIInsert(&mapScroll, x, SCR_PAGE_DOWN);
+
+    x.value = "SCR_HALF_PAGE_UP";
+    x.length = 21;
+    mapSIInsert(&mapScroll, x, SCR_HALF_PAGE_UP);
+
+    x.value = "SCR_HALF_PAGE_DOWN";
+    x.length = 23;
+    mapSIInsert(&mapScroll, x, SCR_HALF_PAGE_DOWN);
+
+    x.value = "b";
+    x.length = 1;
+    mapSIInsert(&mapMotion, x, SCR_COLUMN_LEFT);
+    x.value = "e";
+    x.length = 1;
+    mapSIInsert(&mapMotion, x, SCR_COLUMN_RIGHT);
+    x.value = "B";
+    x.length = 1;
+    mapSIInsert(&mapMotion, x, SCR_COLUMN_LEFT_HALF_PAGE);
+    x.value = "E";
+    x.length = 1;
+    mapSIInsert(&mapMotion, x, SCR_COLUMN_RIGHT_HALF_PAGE);
   }
 
 
 
   MapSI mapAction = mapSINew(100);
 
-  inputCharacter.value = "h";
-  mapSIInsert(&mapAction, inputCharacter, COLUMN_LEFT);
-  inputCharacter.value = "l";
-  mapSIInsert(&mapAction, inputCharacter, COLUMN_RIGHT);
-  inputCharacter.value = "k";
-  mapSIInsert(&mapAction, inputCharacter, ROW_UP);
-  inputCharacter.value = "j";
-  mapSIInsert(&mapAction, inputCharacter, ROW_DOWN);
-  inputCharacter.value = "M";
-  mapSIInsert(&mapAction, inputCharacter, SELECTED_CELL_CENTRE);
-  inputCharacter.value = "H";
-  mapSIInsert(&mapAction, inputCharacter, SELECTED_CELL_TOP);
-  inputCharacter.value = "L";
-  mapSIInsert(&mapAction, inputCharacter, SELECTED_CELL_BOTTOM);
-  inputCharacter.value = "0";
-  mapSIInsert(&mapAction, inputCharacter, SELECTED_CELL_BEGINNING);
-  inputCharacter.value = "$";
-  mapSIInsert(&mapAction, inputCharacter, SELECTED_CELL_END);
-  /*inputCharacter.value = "0";*/
-  /*mapSIInsert(&mapAction, inputCharacter, VIEWPORT_ROW_UP);*/
-  /*inputCharacter.value = "0";*/
-  /*mapSIInsert(&mapAction, inputCharacter, VIEWPORT_ROW_DOWN);*/
-  inputCharacter.value = "b";
-  mapSIInsert(&mapAction, inputCharacter, VIEWPORT_COLUMN_LEFT);
-  inputCharacter.value = "e";
-  mapSIInsert(&mapAction, inputCharacter, VIEWPORT_COLUMN_RIGHT);
-  inputCharacter.value = "B";
-  mapSIInsert(&mapAction, inputCharacter, VIEWPORT_COLUMN_LEFT_HALF_PAGE);
-  inputCharacter.value = "E";
-  mapSIInsert(&mapAction, inputCharacter, VIEWPORT_COLUMN_RIGHT_HALF_PAGE);
-  /*inputCharacter.value = "0";*/
-  /*mapSIInsert(&mapAction, inputCharacter, VIEWPORT_PAGE_UP);*/
-  /*inputCharacter.value = "0";*/
-  /*mapSIInsert(&mapAction, inputCharacter, VIEWPORT_PAGE_DOWN);*/
-  /*inputCharacter.value = "0";*/
-  /*mapSIInsert(&mapAction, inputCharacter, VIEWPORT_HALF_PAGE_UP);*/
-  /*inputCharacter.value = "0";*/
-  /*mapSIInsert(&mapAction, inputCharacter, VIEWPORT_HALF_PAGE_DOWN);*/
-  inputCharacter.value = "g";
-  mapSIInsert(&mapAction, inputCharacter, VIEWPORT_GO_TO);
   inputCharacter.value = "i";
   mapSIInsert(&mapAction, inputCharacter, INSERT_BEGIN);
   inputCharacter.value = "a";
@@ -1452,33 +1595,6 @@ int main() {
   mapSIInsert(&mapAction, inputCharacter, INSERT_ROW);
   inputCharacter.value = "d";
   mapSIInsert(&mapAction, inputCharacter, DELETE_ROW);
-
-  {
-    String x;
-    x.value = "VIEWPORT_ROW_UP";
-    x.length = 15;
-    mapSIInsert(&mapAction, x, VIEWPORT_ROW_UP);
-
-    x.value = "VIEWPORT_ROW_DOWN";
-    x.length = 17;
-    mapSIInsert(&mapAction, x, VIEWPORT_ROW_DOWN);
-
-    x.value = "VIEWPORT_PAGE_UP";
-    x.length = 16;
-    mapSIInsert(&mapAction, x, VIEWPORT_PAGE_UP);
-
-    x.value = "VIEWPORT_PAGE_DOWN";
-    x.length = 18;
-    mapSIInsert(&mapAction, x, VIEWPORT_PAGE_DOWN);
-
-    x.value = "VIEWPORT_HALF_PAGE_UP";
-    x.length = 21;
-    mapSIInsert(&mapAction, x, VIEWPORT_HALF_PAGE_UP);
-
-    x.value = "VIEWPORT_HALF_PAGE_DOWN";
-    x.length = 23;
-    mapSIInsert(&mapAction, x, VIEWPORT_HALF_PAGE_DOWN);
-  }
 
 
 
@@ -1573,7 +1689,7 @@ int main() {
         printf("\n");
         printf("[DEBUG] ========= BEGIN KeyPress =========\n");
 
-        handleKeyPress(event, &sheet, &viewport, mapCount, mapAction, mapMotion, mapCtrlAction);
+        handleKeyPress(event, &sheet, &viewport, mapCount, mapAction, mapMotion, mapCtrlScroll);
 
         printf("[DEBUG] ========= END KeyPress =========\n");
       }
@@ -1614,35 +1730,8 @@ int main() {
 }
 
 
-// TODO: 
-// - fix - delete not moving selected column
-// - sticky header column
-// - sticky header row
-// - read file
-// - save file
-// - improve memory manaegent (sheet.strings)
-// - fix: seg fault on too many o actions
-// - fix: crash on too many a actions
-// - fix: M is relative to the screen, not the sheet
-// - need a nice way to simplify the complexity of implementing compositions (<count><action><motion>)
-//   - improve <count>g implementation
-// - fix: VIEWPORT_ROW_DOWN does not clamp selected cell
-// - fix: VIEWPORT_ROW_UP does not clamp selected cell
-// - fix: VIEWPORT_COLUMN_LEFT does not clamp selected cell
-// - fix: VIEWPORT_COLUMN_RIGHT does not clamp selected cell
-// - g<motion>
-// - G
-// - d<motion>
-// - dd
-// - clamp the viewport before rendering
-// - ignore function keys
-// - make the renderer render things relative to a point so that a cells text, extents, etc are all 'stuck' together
-// - make i insert before text and a insert after text
-// - Support keyToUpper for non alphabet characters such as $
-// - Support scrolling
-// - '.' doesnt work for certain input operations, i think my string handling is broken
-//
 // Done:
+// - fix - delete not moving selected column
 // - <count>g
 // - gg
 // - Add VIEWPORT_COLUMN_RIGHT_HALF_PAGE('E')
@@ -1675,24 +1764,3 @@ int main() {
 // - Add line numbers and column characters
 // - Make '.' repeat the last command
 //
-//
-// Requirements:
-// - Edit cells
-// - add rows and columns
-//
-// NOTES - TEXT INPUT:
-// - Supported
-//   - Latin-1
-//   - the renderer support UTF-8 although the input manager does not (only supports Latin-1)
-// - Unsupported
-//   - Is Euro sign support (i.e. shift-alt-4 or whatever it is)
-//
-// NOTES - ACTIONS:
-// - an interaction with the spreadsheet is a composition of <count><action><motion>
-//   - In cases where the action can either act on rows or columns, the user can specify this using the <count> component.
-//     - a <count> of 18r would act on 19 rows (the current row plus 18 rows above or below)
-//     - 18c would similarly act on the columns
-//     - full example 18rdj - i.e. delete 19 rows from the selected row, downwards
-//       - 18r is the count
-//       - d is the action
-//       - j is the motion

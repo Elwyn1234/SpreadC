@@ -2,8 +2,8 @@
 
 # Insert Mode Commands
 
-| Command | Implemented | Description                                    |
-----------------------------------------------------------------------------------------------
+| Command | Implemented | Description |
+|---------|-------------|-------------|
 | i | | |
 | I | | |
 | o | | |
